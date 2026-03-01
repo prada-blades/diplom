@@ -10,8 +10,6 @@ import (
 	"diplom/internal/domain"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type MemoryStore struct {
 	mu             sync.RWMutex
 	nextUserID     int64

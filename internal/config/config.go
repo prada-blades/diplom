@@ -6,6 +6,7 @@ import (
 
 type Config struct {
 	Address      string
+	DatabaseURL  string
 	JWTSecret    string
 	DefaultAdmin DefaultAdmin
 }
@@ -18,8 +19,9 @@ type DefaultAdmin struct {
 
 func Load() Config {
 	return Config{
-		Address:   getenv("APP_ADDRESS", ":8080"),
-		JWTSecret: getenv("APP_JWT_SECRET", "development-secret"),
+		Address:     getenv("APP_ADDRESS", ":8080"),
+		DatabaseURL: getenv("APP_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/diplom?sslmode=disable"),
+		JWTSecret:   getenv("APP_JWT_SECRET", "development-secret"),
 		DefaultAdmin: DefaultAdmin{
 			FullName: getenv("APP_ADMIN_NAME", "System Administrator"),
 			Email:    getenv("APP_ADMIN_EMAIL", "admin@corp.local"),

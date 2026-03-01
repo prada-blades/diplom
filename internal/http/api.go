@@ -12,7 +12,7 @@ import (
 
 	"diplom/internal/config"
 	"diplom/internal/domain"
-	"diplom/internal/repository"
+	"diplom/internal/repository/postgres"
 	"diplom/internal/service"
 )
 
@@ -31,12 +31,20 @@ type App struct {
 
 func NewApp() (*App, error) {
 	cfg := config.Load()
-	store := repository.NewMemoryStore()
+	store, err := postgres.NewStore(cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := store.Migrate(); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 	authService := service.NewAuthService(store, cfg.JWTSecret)
 	resourceService := service.NewResourceService(store)
-	bookingService := service.NewBookingService(store)
+	bookingService := service.NewBookingService(store, store)
 
 	if err := authService.SeedAdmin(cfg.DefaultAdmin.FullName, cfg.DefaultAdmin.Email, cfg.DefaultAdmin.Password); err != nil {
+		_ = store.Close()
 		return nil, err
 	}
 

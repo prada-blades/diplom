@@ -15,32 +15,33 @@ import (
 )
 
 type AuthService struct {
-	store     *repository.MemoryStore
+	users     repository.UserRepository
 	jwtSecret []byte
 }
 
 type ResourceService struct {
-	store *repository.MemoryStore
+	resources repository.ResourceRepository
 }
 
 type BookingService struct {
-	store *repository.MemoryStore
+	bookings  repository.BookingRepository
+	resources repository.ResourceRepository
 }
 
-func NewAuthService(store *repository.MemoryStore, jwtSecret string) *AuthService {
-	return &AuthService{store: store, jwtSecret: []byte(jwtSecret)}
+func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthService {
+	return &AuthService{users: users, jwtSecret: []byte(jwtSecret)}
 }
 
-func NewResourceService(store *repository.MemoryStore) *ResourceService {
-	return &ResourceService{store: store}
+func NewResourceService(resources repository.ResourceRepository) *ResourceService {
+	return &ResourceService{resources: resources}
 }
 
-func NewBookingService(store *repository.MemoryStore) *BookingService {
-	return &BookingService{store: store}
+func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository) *BookingService {
+	return &BookingService{bookings: bookings, resources: resources}
 }
 
 func (s *AuthService) SeedAdmin(fullName, email, password string) error {
-	_, err := s.store.GetUserByEmail(email)
+	_, err := s.users.GetUserByEmail(email)
 	if err == nil {
 		return nil
 	}
@@ -72,7 +73,7 @@ func (s *AuthService) Register(fullName, email, password string, role domain.Rol
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	created, err := s.store.CreateUser(user)
+	created, err := s.users.CreateUser(user)
 	if err != nil {
 		return domain.User{}, "", err
 	}
@@ -86,7 +87,7 @@ func (s *AuthService) Register(fullName, email, password string, role domain.Rol
 }
 
 func (s *AuthService) Login(email, password string) (domain.User, string, error) {
-	user, err := s.store.GetUserByEmail(email)
+	user, err := s.users.GetUserByEmail(email)
 	if err != nil {
 		return domain.User{}, "", errors.New("invalid credentials")
 	}
@@ -108,7 +109,7 @@ func (s *AuthService) Authenticate(token string) (domain.User, error) {
 		return domain.User{}, errors.New("invalid token")
 	}
 
-	user, err := s.store.GetUserByID(claims.UserID)
+	user, err := s.users.GetUserByID(claims.UserID)
 	if err != nil {
 		return domain.User{}, errors.New("user not found")
 	}
@@ -204,11 +205,11 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 		UpdatedAt:   now,
 	}
 
-	return s.store.CreateResource(resource)
+	return s.resources.CreateResource(resource)
 }
 
 func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, isActive bool) (domain.Resource, error) {
-	current, err := s.store.GetResource(id)
+	current, err := s.resources.GetResource(id)
 	if err != nil {
 		return domain.Resource{}, err
 	}
@@ -224,11 +225,11 @@ func (s *ResourceService) Update(id int64, name string, resourceType domain.Reso
 	current.IsActive = isActive
 	current.UpdatedAt = time.Now().UTC()
 
-	return s.store.UpdateResource(id, current)
+	return s.resources.UpdateResource(id, current)
 }
 
 func (s *ResourceService) Disable(id int64) (domain.Resource, error) {
-	resource, err := s.store.GetResource(id)
+	resource, err := s.resources.GetResource(id)
 	if err != nil {
 		return domain.Resource{}, err
 	}
@@ -236,15 +237,15 @@ func (s *ResourceService) Disable(id int64) (domain.Resource, error) {
 	resource.IsActive = false
 	resource.UpdatedAt = time.Now().UTC()
 
-	return s.store.UpdateResource(id, resource)
+	return s.resources.UpdateResource(id, resource)
 }
 
 func (s *ResourceService) Get(id int64) (domain.Resource, error) {
-	return s.store.GetResource(id)
+	return s.resources.GetResource(id)
 }
 
 func (s *ResourceService) List(resourceType domain.ResourceType, onlyActive bool) []domain.Resource {
-	return s.store.ListResources(resourceType, onlyActive)
+	return s.resources.ListResources(resourceType, onlyActive)
 }
 
 func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, purpose string) (domain.Booking, error) {
@@ -255,7 +256,7 @@ func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, 
 		return domain.Booking{}, errors.New("cannot book in the past")
 	}
 
-	resource, err := s.store.GetResource(resourceID)
+	resource, err := s.resources.GetResource(resourceID)
 	if err != nil {
 		return domain.Booking{}, errors.New("resource not found")
 	}
@@ -273,11 +274,11 @@ func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, 
 		CreatedAt:  time.Now().UTC(),
 	}
 
-	return s.store.CreateBooking(booking)
+	return s.bookings.CreateBooking(booking)
 }
 
 func (s *BookingService) Cancel(requestUser domain.User, bookingID int64) (domain.Booking, error) {
-	booking, err := s.store.GetBooking(bookingID)
+	booking, err := s.bookings.GetBooking(bookingID)
 	if err != nil {
 		return domain.Booking{}, errors.New("booking not found")
 	}
@@ -288,22 +289,22 @@ func (s *BookingService) Cancel(requestUser domain.User, bookingID int64) (domai
 		return domain.Booking{}, errors.New("forbidden")
 	}
 
-	return s.store.CancelBooking(bookingID, time.Now().UTC())
+	return s.bookings.CancelBooking(bookingID, time.Now().UTC())
 }
 
 func (s *BookingService) ListMy(userID int64) []domain.Booking {
-	return s.store.ListBookingsByUser(userID)
+	return s.bookings.ListBookingsByUser(userID)
 }
 
 func (s *BookingService) ListAll() []domain.Booking {
-	return s.store.ListBookings()
+	return s.bookings.ListBookings()
 }
 
 func (s *BookingService) Availability(start, end time.Time, resourceType domain.ResourceType) ([]domain.Resource, error) {
 	if !start.Before(end) {
 		return nil, errors.New("start_time must be before end_time")
 	}
-	return s.store.ListAvailableResources(start.UTC(), end.UTC(), resourceType), nil
+	return s.bookings.ListAvailableResources(start.UTC(), end.UTC(), resourceType), nil
 }
 
 func (s *BookingService) Utilization(start, end time.Time) ([]domain.UtilizationReportItem, error) {
@@ -311,8 +312,8 @@ func (s *BookingService) Utilization(start, end time.Time) ([]domain.Utilization
 		return nil, errors.New("start_time must be before end_time")
 	}
 
-	bookings := s.store.ListBookings()
-	resources := s.store.ListResources("", false)
+	bookings := s.bookings.ListBookings()
+	resources := s.resources.ListResources("", false)
 	resourceByID := make(map[int64]domain.Resource, len(resources))
 	for _, resource := range resources {
 		resourceByID[resource.ID] = resource

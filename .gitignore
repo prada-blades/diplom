@@ -1,0 +1,23 @@
+.idea/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Binaries
+bin/
+
+# Coverage
+coverage.out
+
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
