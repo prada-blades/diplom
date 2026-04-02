@@ -441,7 +441,71 @@
 - `400 invalid_period`: отсутствует `start/end` или неверный формат
 - `400 availability_failed`: невалидный интервал
 
-## 6. Административные эндпоинты
+## 6. Рекомендации по расписанию
+
+### `POST /recommendations/schedule`
+
+Подбирает до трёх лучших вариантов бронирования переговорной по целевой функции:
+
+`J = 0.5 * T + 0.3 * C + 0.2 * U`
+
+где:
+
+- `T` — нормированное отклонение от `preferred_start`;
+- `C` — относительный избыток вместимости;
+- `U` — загрузка ресурса за последние 30 дней.
+
+Первая версия поддерживает только `meeting_room`.
+
+Требует авторизацию: `employee`, `admin`
+
+Тело запроса:
+
+```json
+{
+  "resource_type": "meeting_room",
+  "participants": 4,
+  "duration_minutes": 60,
+  "preferred_start": "2026-03-02T10:00:00Z",
+  "search_window_start": "2026-03-02T09:00:00Z",
+  "search_window_end": "2026-03-02T12:00:00Z"
+}
+```
+
+Ограничения:
+
+- `duration_minutes` должно быть положительным и кратным `15`;
+- `preferred_start` должен находиться внутри окна поиска;
+- окно поиска должно вмещать хотя бы один слот длительности `duration_minutes`.
+
+Успешный ответ: `200 OK`
+
+```json
+{
+  "items": [
+    {
+      "resource_id": 1,
+      "start_time": "2026-03-02T10:00:00Z",
+      "end_time": "2026-03-02T11:00:00Z",
+      "score": 0.03125,
+      "explanation": "time deviation 0 min, extra capacity 0.0%, recent utilization 15.6%"
+    }
+  ]
+}
+```
+
+Если внутри окна нет допустимых вариантов, сервер возвращает `200 OK` с пустым массивом `items`.
+
+Ошибки:
+
+- `401 unauthorized`: нет токена
+- `400 invalid_json`: неверный JSON
+- `400 invalid_preferred_start`: `preferred_start` не в формате `RFC3339`
+- `400 invalid_search_window_start`: `search_window_start` не в формате `RFC3339`
+- `400 invalid_search_window_end`: `search_window_end` не в формате `RFC3339`
+- `400 recommendation_failed`: невалидные параметры или неподдерживаемый тип ресурса
+
+## 7. Административные эндпоинты
 
 ### `GET /admin/bookings`
 
@@ -477,6 +541,8 @@
 
 Возвращает отчёт по загрузке ресурсов за указанный период.
 
+Помимо основного списка по ресурсам, ответ включает агрегированную статистику по часам суток и дням недели.
+
 Требует авторизацию: `admin`
 
 Параметры запроса:
@@ -500,7 +566,37 @@
       "booked_minutes": 60,
       "utilization_percent": 4.1666666667
     }
-  ]
+  ],
+  "stats": {
+    "resource_loads": [
+      {
+        "resource_id": 1,
+        "resource_name": "Room A",
+        "resource_type": "meeting_room",
+        "booked_minutes": 60,
+        "utilization_percent": 4.1666666667
+      }
+    ],
+    "hour_loads": [
+      {
+        "hour": 9,
+        "booked_minutes": 60,
+        "share_percent": 66.666667
+      },
+      {
+        "hour": 10,
+        "booked_minutes": 30,
+        "share_percent": 33.333333
+      }
+    ],
+    "weekday_loads": [
+      {
+        "weekday": "monday",
+        "booked_minutes": 90,
+        "share_percent": 100
+      }
+    ]
+  }
 }
 ```
 
@@ -511,18 +607,19 @@
 - `400 invalid_period`: отсутствует `start/end` или неверный формат
 - `400 report_failed`: невалидный интервал
 
-## 7. Пример сценария использования
+## 8. Пример сценария использования
 
 1. Администратор входит через `POST /auth/login`.
 2. Администратор создаёт ресурсы через `POST /resources`.
 3. Пользователь регистрируется через `POST /auth/register`.
 4. Пользователь получает свой профиль через `GET /me`.
 5. Пользователь запрашивает свободные ресурсы через `GET /availability`.
-6. Пользователь создаёт бронь через `POST /bookings`.
-7. Пользователь просматривает свои брони через `GET /bookings/my`.
-8. Администратор контролирует общую загрузку через `GET /admin/bookings` и `GET /admin/reports/utilization`.
+6. Пользователь при необходимости запрашивает лучшие варианты через `POST /recommendations/schedule`.
+7. Пользователь создаёт бронь через `POST /bookings`.
+8. Пользователь просматривает свои брони через `GET /bookings/my`.
+9. Администратор контролирует общую загрузку через `GET /admin/bookings` и `GET /admin/reports/utilization`.
 
-## 8. Замечания по текущей реализации
+## 9. Замечания по текущей реализации
 
 - Текущая версия использует `PostgreSQL`; начальная SQL-миграция выполняется при старте сервера автоматически.
 - Токен реализован без внешних библиотек, в формате JWT-подобной строки, совместимой с текущим сервером.

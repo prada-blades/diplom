@@ -22,5 +22,10 @@ coverage.out
 # OS files
 .DS_Store
 
-.idea/
+plan.md
+openapi.yaml
+literature.md
 
+/Тезис_БЦ_Бронирование_ресурсов.docx
+/article_shortened_source.txt
+/article_architecture.md

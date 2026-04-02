@@ -81,6 +81,7 @@ func (a *App) registerRoutes(mux *nethttp.ServeMux) {
 	mux.HandleFunc("/resources/", a.handleResourceByID)
 
 	mux.Handle("/availability", a.requireAuth(nethttp.HandlerFunc(a.handleAvailability)))
+	mux.Handle("/recommendations/schedule", a.requireAuth(nethttp.HandlerFunc(a.handleScheduleRecommendations)))
 	mux.Handle("/bookings/my", a.requireAuth(nethttp.HandlerFunc(a.handleMyBookings)))
 	mux.Handle("/bookings", a.requireAuth(nethttp.HandlerFunc(a.handleCreateBooking)))
 	mux.Handle("/bookings/", a.requireAuth(nethttp.HandlerFunc(a.handleBookingByID)))
@@ -313,6 +314,59 @@ func (a *App) handleMyBookings(w nethttp.ResponseWriter, r *nethttp.Request) {
 	})
 }
 
+type scheduleRecommendationRequest struct {
+	ResourceType      domain.ResourceType `json:"resource_type"`
+	Participants      int                 `json:"participants"`
+	DurationMinutes   int                 `json:"duration_minutes"`
+	PreferredStart    string              `json:"preferred_start"`
+	SearchWindowStart string              `json:"search_window_start"`
+	SearchWindowEnd   string              `json:"search_window_end"`
+}
+
+func (a *App) handleScheduleRecommendations(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if r.Method != nethttp.MethodPost {
+		writeError(w, nethttp.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	var req scheduleRecommendationRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, nethttp.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+
+	preferredStart, err := time.Parse(time.RFC3339, req.PreferredStart)
+	if err != nil {
+		writeError(w, nethttp.StatusBadRequest, "invalid_preferred_start", "preferred_start must be RFC3339")
+		return
+	}
+	searchWindowStart, err := time.Parse(time.RFC3339, req.SearchWindowStart)
+	if err != nil {
+		writeError(w, nethttp.StatusBadRequest, "invalid_search_window_start", "search_window_start must be RFC3339")
+		return
+	}
+	searchWindowEnd, err := time.Parse(time.RFC3339, req.SearchWindowEnd)
+	if err != nil {
+		writeError(w, nethttp.StatusBadRequest, "invalid_search_window_end", "search_window_end must be RFC3339")
+		return
+	}
+
+	items, err := a.bookingService.RecommendSchedule(service.ScheduleRecommendationRequest{
+		ResourceType:      req.ResourceType,
+		Participants:      req.Participants,
+		DurationMinutes:   req.DurationMinutes,
+		PreferredStart:    preferredStart,
+		SearchWindowStart: searchWindowStart,
+		SearchWindowEnd:   searchWindowEnd,
+	})
+	if err != nil {
+		writeError(w, nethttp.StatusBadRequest, "recommendation_failed", err.Error())
+		return
+	}
+
+	writeJSON(w, nethttp.StatusOK, map[string]any{"items": items})
+}
+
 type bookingRequest struct {
 	ResourceID int64  `json:"resource_id"`
 	StartTime  string `json:"start_time"`
@@ -404,13 +458,13 @@ func (a *App) handleUtilizationReport(w nethttp.ResponseWriter, r *nethttp.Reque
 		return
 	}
 
-	report, err := a.bookingService.Utilization(start, end)
+	report, err := a.bookingService.UtilizationReport(start, end)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "report_failed", err.Error())
 		return
 	}
 
-	writeJSON(w, nethttp.StatusOK, map[string]any{"items": report})
+	writeJSON(w, nethttp.StatusOK, report)
 }
 
 func (a *App) loggingMiddleware(next nethttp.Handler) nethttp.Handler {
