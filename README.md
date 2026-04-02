@@ -5,8 +5,9 @@
 ## Что уже реализовано
 
 - регистрация и вход пользователя;
-- JWT-подобная аутентификация без внешних зависимостей;
+- JWT-аутентификация через библиотеку `github.com/golang-jwt/jwt/v5`;
 - PostgreSQL-хранилище с SQL-миграцией при старте;
+- Redis-кэш для read-only endpoint'ов с graceful fallback;
 - роли `employee` и `admin`;
 - справочник ресурсов (`meeting_room`, `workspace`);
 - создание и отмена бронирований;
@@ -20,7 +21,7 @@
 
 ## Быстрый запуск
 
-1. Поднимите PostgreSQL:
+1. Поднимите PostgreSQL и Redis:
 
 ```bash
 docker compose up -d
@@ -39,6 +40,10 @@ go run .
 - `APP_ADDRESS=:8080`
 - `APP_DATABASE_URL=postgres://postgres:postgres@localhost:5432/diplom?sslmode=disable`
 - `APP_JWT_SECRET=development-secret`
+- `APP_REDIS_ENABLED=false`
+- `APP_REDIS_ADDR=localhost:6379`
+- `APP_REDIS_PASSWORD=`
+- `APP_REDIS_DB=0`
 
 Предсозданный администратор по умолчанию:
 

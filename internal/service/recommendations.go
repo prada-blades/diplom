@@ -181,16 +181,24 @@ func (s *BookingService) RecommendSchedule(req ScheduleRecommendationRequest) ([
 }
 
 func (s *BookingService) UtilizationReport(start, end time.Time) (UtilizationReport, error) {
+	key := buildUtilizationCacheKey(start.UTC(), end.UTC())
+	var report UtilizationReport
+	if ok := loadCachedJSON(s.cache, key, &report); ok {
+		return report, nil
+	}
+
 	items, err := s.Utilization(start, end)
 	if err != nil {
 		return UtilizationReport{}, err
 	}
 
 	stats := s.buildUtilizationReportStats(start.UTC(), end.UTC(), items)
-	return UtilizationReport{
+	report = UtilizationReport{
 		Items: items,
 		Stats: stats,
-	}, nil
+	}
+	storeCachedJSON(s.cache, key, report, defaultCacheTTL)
+	return report, nil
 }
 
 func (s *BookingService) buildUtilizationReportStats(start, end time.Time, resourceLoads []domain.UtilizationReportItem) UtilizationReportStats {

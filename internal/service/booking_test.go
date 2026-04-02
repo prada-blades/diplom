@@ -4,14 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"diplom/internal/cache"
 	"diplom/internal/domain"
 	"diplom/internal/repository"
 )
 
 func TestBookingServiceCreateRejectsOverlappingBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Main room")
 	if err != nil {
@@ -37,8 +38,8 @@ func TestBookingServiceCreateRejectsOverlappingBookings(t *testing.T) {
 
 func TestBookingServiceCreateAllowsAdjacentBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create("Desk 1", domain.ResourceWorkspace, "HQ", 0, "Window desk")
 	if err != nil {
@@ -62,8 +63,8 @@ func TestBookingServiceCreateAllowsAdjacentBookings(t *testing.T) {
 
 func TestBookingServiceCreateRejectsPastBooking(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 4, "Small room")
 	if err != nil {
@@ -84,8 +85,8 @@ func TestBookingServiceCreateRejectsPastBooking(t *testing.T) {
 
 func TestBookingServiceCancelRespectsOwnership(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create("Room C", domain.ResourceMeetingRoom, "HQ", 6, "Project room")
 	if err != nil {

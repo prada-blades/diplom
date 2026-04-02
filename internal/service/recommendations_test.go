@@ -4,14 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"diplom/internal/cache"
 	"diplom/internal/domain"
 	"diplom/internal/repository"
 )
 
 func TestRecommendScheduleReturnsPreferredSlotFirst(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	smallRoom, err := resourceService.Create("Small", domain.ResourceMeetingRoom, "HQ", 4, "Small room")
 	if err != nil {
@@ -47,8 +48,8 @@ func TestRecommendScheduleReturnsPreferredSlotFirst(t *testing.T) {
 
 func TestRecommendScheduleFindsNearestSlotWhenPreferredIsBusy(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	room, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Main room")
 	if err != nil {
@@ -80,8 +81,8 @@ func TestRecommendScheduleFindsNearestSlotWhenPreferredIsBusy(t *testing.T) {
 
 func TestRecommendSchedulePrefersSmallerCapacityExcess(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	compactRoom, err := resourceService.Create("Compact", domain.ResourceMeetingRoom, "HQ", 4, "Compact room")
 	if err != nil {
@@ -114,8 +115,8 @@ func TestRecommendSchedulePrefersSmallerCapacityExcess(t *testing.T) {
 
 func TestRecommendSchedulePrefersLessUtilizedRoomWhenCapacityMatches(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	busyRoom, err := resourceService.Create("Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room")
 	if err != nil {
@@ -151,8 +152,8 @@ func TestRecommendSchedulePrefersLessUtilizedRoomWhenCapacityMatches(t *testing.
 
 func TestRecommendScheduleAllowsAdjacentIntervals(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	room, err := resourceService.Create("Room Adjacent", domain.ResourceMeetingRoom, "HQ", 6, "Adjacent room")
 	if err != nil {
@@ -183,8 +184,8 @@ func TestRecommendScheduleAllowsAdjacentIntervals(t *testing.T) {
 
 func TestRecommendScheduleReturnsEmptyWhenNoCandidatesExist(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	room, err := resourceService.Create("Room Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room")
 	if err != nil {
@@ -214,8 +215,8 @@ func TestRecommendScheduleReturnsEmptyWhenNoCandidatesExist(t *testing.T) {
 
 func TestUtilizationReportIncludesHourAndWeekdayStats(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store)
-	bookingService := NewBookingService(store, store)
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	roomA, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Room A")
 	if err != nil {

@@ -1,17 +1,24 @@
 package service
 
 import (
-	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"diplom/internal/cache"
 	"diplom/internal/domain"
 	"diplom/internal/repository"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+const (
+	availabilityCachePrefix = "availability:"
+	utilizationCachePrefix  = "utilization:"
+	defaultCacheTTL         = 2 * time.Minute
 )
 
 type AuthService struct {
@@ -21,23 +28,31 @@ type AuthService struct {
 
 type ResourceService struct {
 	resources repository.ResourceRepository
+	cache     cache.Cache
 }
 
 type BookingService struct {
 	bookings  repository.BookingRepository
 	resources repository.ResourceRepository
+	cache     cache.Cache
 }
 
 func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthService {
 	return &AuthService{users: users, jwtSecret: []byte(jwtSecret)}
 }
 
-func NewResourceService(resources repository.ResourceRepository) *ResourceService {
-	return &ResourceService{resources: resources}
+func NewResourceService(resources repository.ResourceRepository, c cache.Cache) *ResourceService {
+	if c == nil {
+		c = cache.NewNoop()
+	}
+	return &ResourceService{resources: resources, cache: c}
 }
 
-func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository) *BookingService {
-	return &BookingService{bookings: bookings, resources: resources}
+func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository, c cache.Cache) *BookingService {
+	if c == nil {
+		c = cache.NewNoop()
+	}
+	return &BookingService{bookings: bookings, resources: resources, cache: c}
 }
 
 func (s *AuthService) SeedAdmin(fullName, email, password string) error {
@@ -120,61 +135,42 @@ func (s *AuthService) Authenticate(token string) (domain.User, error) {
 type tokenClaims struct {
 	UserID int64       `json:"user_id"`
 	Role   domain.Role `json:"role"`
-	Exp    int64       `json:"exp"`
+	jwt.RegisteredClaims
 }
 
 func (s *AuthService) createToken(user domain.User) (string, error) {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	claims := tokenClaims{
 		UserID: user.ID,
 		Role:   user.Role,
-		Exp:    time.Now().Add(24 * time.Hour).Unix(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
-	payloadRaw, err := json.Marshal(claims)
-	if err != nil {
-		return "", err
-	}
-
-	payload := base64.RawURLEncoding.EncodeToString(payloadRaw)
-	unsigned := header + "." + payload
-	signature := sign(unsigned, s.jwtSecret)
-
-	return unsigned + "." + signature, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.jwtSecret)
 }
 
 func (s *AuthService) parseToken(token string) (tokenClaims, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return tokenClaims{}, errors.New("invalid token format")
-	}
-
-	unsigned := parts[0] + "." + parts[1]
-	expected := sign(unsigned, s.jwtSecret)
-	if !hmac.Equal([]byte(expected), []byte(parts[2])) {
-		return tokenClaims{}, errors.New("invalid signature")
-	}
-
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return tokenClaims{}, err
-	}
-
 	var claims tokenClaims
-	if err := json.Unmarshal(payload, &claims); err != nil {
+	parsed, err := jwt.ParseWithClaims(token, &claims, func(parsed *jwt.Token) (any, error) {
+		if parsed.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New("unexpected signing method")
+		}
+		return s.jwtSecret, nil
+	})
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return tokenClaims{}, errors.New("token expired")
+		}
 		return tokenClaims{}, err
 	}
-	if time.Now().Unix() > claims.Exp {
-		return tokenClaims{}, errors.New("token expired")
+	if !parsed.Valid {
+		return tokenClaims{}, errors.New("invalid token")
 	}
 
 	return claims, nil
-}
-
-func sign(input string, secret []byte) string {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(input))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func hashPassword(password string) string {
@@ -205,7 +201,13 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 		UpdatedAt:   now,
 	}
 
-	return s.resources.CreateResource(resource)
+	created, err := s.resources.CreateResource(resource)
+	if err != nil {
+		return domain.Resource{}, err
+	}
+
+	s.invalidateReadCache()
+	return created, nil
 }
 
 func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, isActive bool) (domain.Resource, error) {
@@ -225,7 +227,13 @@ func (s *ResourceService) Update(id int64, name string, resourceType domain.Reso
 	current.IsActive = isActive
 	current.UpdatedAt = time.Now().UTC()
 
-	return s.resources.UpdateResource(id, current)
+	updated, err := s.resources.UpdateResource(id, current)
+	if err != nil {
+		return domain.Resource{}, err
+	}
+
+	s.invalidateReadCache()
+	return updated, nil
 }
 
 func (s *ResourceService) Disable(id int64) (domain.Resource, error) {
@@ -237,7 +245,13 @@ func (s *ResourceService) Disable(id int64) (domain.Resource, error) {
 	resource.IsActive = false
 	resource.UpdatedAt = time.Now().UTC()
 
-	return s.resources.UpdateResource(id, resource)
+	updated, err := s.resources.UpdateResource(id, resource)
+	if err != nil {
+		return domain.Resource{}, err
+	}
+
+	s.invalidateReadCache()
+	return updated, nil
 }
 
 func (s *ResourceService) Get(id int64) (domain.Resource, error) {
@@ -274,7 +288,13 @@ func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, 
 		CreatedAt:  time.Now().UTC(),
 	}
 
-	return s.bookings.CreateBooking(booking)
+	created, err := s.bookings.CreateBooking(booking)
+	if err != nil {
+		return domain.Booking{}, err
+	}
+
+	s.invalidateReadCache()
+	return created, nil
 }
 
 func (s *BookingService) Cancel(requestUser domain.User, bookingID int64) (domain.Booking, error) {
@@ -289,7 +309,13 @@ func (s *BookingService) Cancel(requestUser domain.User, bookingID int64) (domai
 		return domain.Booking{}, errors.New("forbidden")
 	}
 
-	return s.bookings.CancelBooking(bookingID, time.Now().UTC())
+	cancelled, err := s.bookings.CancelBooking(bookingID, time.Now().UTC())
+	if err != nil {
+		return domain.Booking{}, err
+	}
+
+	s.invalidateReadCache()
+	return cancelled, nil
 }
 
 func (s *BookingService) ListMy(userID int64) []domain.Booking {
@@ -304,7 +330,16 @@ func (s *BookingService) Availability(start, end time.Time, resourceType domain.
 	if !start.Before(end) {
 		return nil, errors.New("start_time must be before end_time")
 	}
-	return s.bookings.ListAvailableResources(start.UTC(), end.UTC(), resourceType), nil
+
+	key := buildAvailabilityCacheKey(start.UTC(), end.UTC(), resourceType)
+	var items []domain.Resource
+	if ok := loadCachedJSON(s.cache, key, &items); ok {
+		return items, nil
+	}
+
+	items = s.bookings.ListAvailableResources(start.UTC(), end.UTC(), resourceType)
+	storeCachedJSON(s.cache, key, items, defaultCacheTTL)
+	return items, nil
 }
 
 func (s *BookingService) Utilization(start, end time.Time) ([]domain.UtilizationReportItem, error) {
@@ -350,6 +385,42 @@ func (s *BookingService) Utilization(start, end time.Time) ([]domain.Utilization
 
 	_ = resourceByID
 	return report, nil
+}
+
+func (s *BookingService) invalidateReadCache() {
+	_ = s.cache.DeleteByPrefix(availabilityCachePrefix)
+	_ = s.cache.DeleteByPrefix(utilizationCachePrefix)
+}
+
+func (s *ResourceService) invalidateReadCache() {
+	_ = s.cache.DeleteByPrefix(availabilityCachePrefix)
+	_ = s.cache.DeleteByPrefix(utilizationCachePrefix)
+}
+
+func buildAvailabilityCacheKey(start, end time.Time, resourceType domain.ResourceType) string {
+	return availabilityCachePrefix + start.Format(time.RFC3339) + ":" + end.Format(time.RFC3339) + ":" + string(resourceType)
+}
+
+func buildUtilizationCacheKey(start, end time.Time) string {
+	return utilizationCachePrefix + start.Format(time.RFC3339) + ":" + end.Format(time.RFC3339)
+}
+
+func loadCachedJSON(c cache.Cache, key string, dst any) bool {
+	payload, err := c.Get(key)
+	if err != nil {
+		return false
+	}
+
+	return json.Unmarshal(payload, dst) == nil
+}
+
+func storeCachedJSON(c cache.Cache, key string, payload any, ttl time.Duration) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	_ = c.Set(key, data, ttl)
 }
 
 func minTime(a, b time.Time) time.Time {

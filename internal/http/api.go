@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"diplom/internal/cache"
 	"diplom/internal/config"
 	"diplom/internal/domain"
 	"diplom/internal/repository/postgres"
@@ -31,6 +32,7 @@ type App struct {
 
 func NewApp() (*App, error) {
 	cfg := config.Load()
+	logger := slog.Default()
 	store, err := postgres.NewStore(cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -39,9 +41,19 @@ func NewApp() (*App, error) {
 		_ = store.Close()
 		return nil, err
 	}
+	appCache := cache.Cache(cache.NewNoop())
+	if cfg.Redis.Enabled {
+		redisCache, err := cache.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+		if err != nil {
+			logger.Warn("redis unavailable, continuing without cache", "addr", cfg.Redis.Addr, "error", err)
+		} else {
+			appCache = redisCache
+		}
+	}
+
 	authService := service.NewAuthService(store, cfg.JWTSecret)
-	resourceService := service.NewResourceService(store)
-	bookingService := service.NewBookingService(store, store)
+	resourceService := service.NewResourceService(store, appCache)
+	bookingService := service.NewBookingService(store, store, appCache)
 
 	if err := authService.SeedAdmin(cfg.DefaultAdmin.FullName, cfg.DefaultAdmin.Email, cfg.DefaultAdmin.Password); err != nil {
 		_ = store.Close()
@@ -50,7 +62,7 @@ func NewApp() (*App, error) {
 
 	app := &App{
 		cfg:             cfg,
-		logger:          slog.Default(),
+		logger:          logger,
 		authService:     authService,
 		resourceService: resourceService,
 		bookingService:  bookingService,
