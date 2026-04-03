@@ -84,6 +84,8 @@ func (a *App) Run() error {
 }
 
 func (a *App) registerRoutes(mux *nethttp.ServeMux) {
+	a.registerAdminUIRoutes(mux)
+
 	mux.HandleFunc("/health", a.handleHealth)
 	mux.HandleFunc("/auth/register", a.handleRegister)
 	mux.HandleFunc("/auth/login", a.handleLogin)
@@ -530,6 +532,10 @@ func (a *App) authenticatedUserFromRequest(w nethttp.ResponseWriter, r *nethttp.
 func currentUser(r *nethttp.Request) domain.User {
 	user, _ := r.Context().Value(userContextKey).(domain.User)
 	return user
+}
+
+func withUser(ctx context.Context, user domain.User) context.Context {
+	return context.WithValue(ctx, userContextKey, user)
 }
 
 func parseID(raw string) (int64, error) {

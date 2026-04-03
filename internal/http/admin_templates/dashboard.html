@@ -1,0 +1,22 @@
+{{define "dashboard_content"}}
+<section class="stats-grid">
+  <article class="panel stat-card">
+    <p class="eyebrow">Resources</p>
+    <strong>{{.Stats.ResourcesCount}}</strong>
+    <span>{{.Stats.ActiveResourcesCount}} active</span>
+  </article>
+  <article class="panel stat-card">
+    <p class="eyebrow">Bookings</p>
+    <strong>{{.Stats.BookingsCount}}</strong>
+    <span>{{.Stats.ActiveBookingsCount}} active</span>
+  </article>
+</section>
+<section class="panel quick-links">
+  <h3>Quick actions</h3>
+  <div class="actions">
+    <a class="button-link" href="/admin/ui/resources">Manage resources</a>
+    <a class="button-link" href="/admin/ui/bookings">Review bookings</a>
+    <a class="button-link" href="/admin/ui/reports/utilization">Open reports</a>
+  </div>
+</section>
+{{end}}

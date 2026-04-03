@@ -1,0 +1,289 @@
+:root {
+  --bg: #f3efe6;
+  --panel: #fffdf8;
+  --ink: #1f1d1a;
+  --muted: #6d665c;
+  --line: #d9cfbf;
+  --accent: #0f766e;
+  --accent-dark: #115e59;
+  --danger: #b42318;
+  --sidebar: #1f2937;
+  --sidebar-ink: #f9fafb;
+  --shadow: 0 18px 50px rgba(31, 29, 26, 0.1);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28%),
+    linear-gradient(180deg, #f7f2e9 0%, var(--bg) 100%);
+  color: var(--ink);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+}
+
+.sidebar {
+  background: linear-gradient(180deg, #111827 0%, var(--sidebar) 100%);
+  color: var(--sidebar-ink);
+  padding: 28px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.sidebar h1,
+.login-panel h1,
+.page-header h2 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  margin: 0;
+}
+
+.nav {
+  display: grid;
+  gap: 8px;
+}
+
+.nav a,
+.button-link,
+button {
+  transition: 160ms ease;
+}
+
+.nav a {
+  padding: 11px 14px;
+  border-radius: 14px;
+  color: rgba(249, 250, 251, 0.78);
+}
+
+.nav a.active,
+.nav a:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.content {
+  padding: 28px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid rgba(217, 207, 191, 0.85);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.stats-grid,
+.split-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
+.split-grid {
+  grid-template-columns: minmax(320px, 420px) 1fr;
+}
+
+.stat-card strong {
+  display: block;
+  font-size: 40px;
+  margin: 14px 0 4px;
+}
+
+.actions,
+.row-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button,
+.button-link {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+button:hover,
+.button-link:hover {
+  background: var(--accent-dark);
+}
+
+.button-link.secondary,
+.ghost {
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(217, 207, 191, 0.85);
+}
+
+.danger {
+  background: var(--danger);
+}
+
+.ghost {
+  width: 100%;
+}
+
+.flash {
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.flash.notice {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f5c56;
+}
+
+.flash.error {
+  background: rgba(180, 35, 24, 0.12);
+  color: #8b1e17;
+}
+
+.form-grid,
+.filter-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.filter-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+}
+
+label span {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: white;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(217, 207, 191, 0.7);
+  vertical-align: top;
+}
+
+.compact th,
+.compact td {
+  padding: 10px 8px;
+}
+
+.quick-links {
+  margin-top: 20px;
+}
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(100%, 480px);
+}
+
+@media (max-width: 960px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid,
+  .split-grid,
+  .form-grid,
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    gap: 18px;
+  }
+}

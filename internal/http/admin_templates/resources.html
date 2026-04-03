@@ -1,0 +1,85 @@
+{{define "resources_content"}}
+<section class="split-grid">
+  <article class="panel">
+    <h3>{{if .EditResourceID}}Edit resource #{{.EditResourceID}}{{else}}Create resource{{end}}</h3>
+    <form method="post" action="{{if .EditResourceID}}/admin/ui/resources/{{.EditResourceID}}/update{{else}}/admin/ui/resources{{end}}" class="form-grid">
+      <label>
+        <span>Name</span>
+        <input type="text" name="name" required value="{{.ResourceForm.Name}}">
+      </label>
+      <label>
+        <span>Type</span>
+        <select name="type" required>
+          {{range .ResourceTypes}}
+            <option value="{{.}}" {{if eq $.ResourceForm.Type .}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        <span>Location</span>
+        <input type="text" name="location" required value="{{.ResourceForm.Location}}">
+      </label>
+      <label>
+        <span>Capacity</span>
+        <input type="number" name="capacity" min="0" required value="{{.ResourceForm.Capacity}}">
+      </label>
+      <label class="full">
+        <span>Description</span>
+        <textarea name="description" rows="4">{{.ResourceForm.Description}}</textarea>
+      </label>
+      {{if .EditResourceID}}
+        <label class="checkbox">
+          <input type="checkbox" name="is_active" {{if .ResourceForm.IsActive}}checked{{end}}>
+          <span>Resource is active</span>
+        </label>
+      {{end}}
+      <div class="actions">
+        <button type="submit">{{if .EditResourceID}}Save changes{{else}}Create resource{{end}}</button>
+        {{if .EditResourceID}}<a class="button-link secondary" href="/admin/ui/resources">New resource</a>{{end}}
+      </div>
+    </form>
+  </article>
+  <article class="panel">
+    <h3>Current resources</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Location</th>
+            <th>Capacity</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Resources}}
+          <tr>
+            <td>{{.ID}}</td>
+            <td>{{.Name}}</td>
+            <td>{{.Type}}</td>
+            <td>{{.Location}}</td>
+            <td>{{.Capacity}}</td>
+            <td>{{if .IsActive}}active{{else}}inactive{{end}}</td>
+            <td class="row-actions">
+              <a class="button-link secondary" href="/admin/ui/resources?edit={{.ID}}">Edit</a>
+              {{if .IsActive}}
+              <form method="post" action="/admin/ui/resources/{{.ID}}/disable">
+                <button class="danger" type="submit">Disable</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="7">No resources found.</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{{end}}

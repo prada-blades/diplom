@@ -1,0 +1,20 @@
+{{define "login_content"}}
+<section class="panel login-panel">
+  <p class="eyebrow">Admin Access</p>
+  <h1>Sign in to the local control panel</h1>
+  <p class="muted">Use an administrator account from the same server.</p>
+  {{if .Notice}}<div class="flash notice">{{.Notice}}</div>{{end}}
+  {{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
+  <form method="post" action="/admin/ui/login" class="form-grid">
+    <label>
+      <span>Email</span>
+      <input type="email" name="email" required autocomplete="username">
+    </label>
+    <label>
+      <span>Password</span>
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <button type="submit">Sign in</button>
+  </form>
+</section>
+{{end}}

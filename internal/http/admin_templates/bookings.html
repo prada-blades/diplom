@@ -1,0 +1,79 @@
+{{define "bookings_content"}}
+<section class="panel">
+  <h3>Filters</h3>
+  <form method="get" action="/admin/ui/bookings" class="filter-grid">
+    <label>
+      <span>Status</span>
+      <select name="status">
+        <option value="">all</option>
+        <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>active</option>
+        <option value="cancelled" {{if eq .StatusFilter "cancelled"}}selected{{end}}>cancelled</option>
+      </select>
+    </label>
+    <label>
+      <span>Resource</span>
+      <select name="resource_id">
+        <option value="">all</option>
+        {{range .Resources}}
+          <option value="{{.ID}}" {{if selectedResource .ID $.ResourceFilter}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>
+      <span>Start after</span>
+      <input type="datetime-local" name="start" value="{{.StartFilter}}">
+    </label>
+    <label>
+      <span>End before</span>
+      <input type="datetime-local" name="end" value="{{.EndFilter}}">
+    </label>
+    <div class="actions">
+      <button type="submit">Apply filters</button>
+      <a class="button-link secondary" href="/admin/ui/bookings">Reset</a>
+    </div>
+  </form>
+</section>
+<section class="panel">
+  <h3>Bookings</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Resource</th>
+          <th>User ID</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Status</th>
+          <th>Purpose</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Bookings}}
+        <tr>
+          <td>{{.ID}}</td>
+          <td>{{.ResourceName}} (#{{.ResourceID}})</td>
+          <td>{{.UserID}}</td>
+          <td>{{formatDateTime .StartTime}}</td>
+          <td>{{formatDateTime .EndTime}}</td>
+          <td>{{.Status}}</td>
+          <td>{{.Purpose}}</td>
+          <td class="row-actions">
+            {{if eq .Status "active"}}
+            <form method="post" action="/admin/ui/bookings/{{.ID}}/cancel">
+              <button class="danger" type="submit">Cancel</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="8">No bookings match the selected filters.</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}

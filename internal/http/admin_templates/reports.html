@@ -1,0 +1,97 @@
+{{define "reports_content"}}
+<section class="panel">
+  <h3>Period</h3>
+  <form method="get" action="/admin/ui/reports/utilization" class="filter-grid">
+    <label>
+      <span>Start</span>
+      <input type="datetime-local" name="start" value="{{.ReportStart}}" required>
+    </label>
+    <label>
+      <span>End</span>
+      <input type="datetime-local" name="end" value="{{.ReportEnd}}" required>
+    </label>
+    <div class="actions">
+      <button type="submit">Build report</button>
+    </div>
+  </form>
+</section>
+{{if .Report}}
+<section class="panel">
+  <h3>Resource utilization</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Resource</th>
+          <th>Type</th>
+          <th>Booked minutes</th>
+          <th>Utilization %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Report.Items}}
+        <tr>
+          <td>{{.ResourceName}} (#{{.ResourceID}})</td>
+          <td>{{.ResourceType}}</td>
+          <td>{{.BookedMinutes}}</td>
+          <td>{{formatPercent .Utilization}}</td>
+        </tr>
+        {{else}}
+        <tr>
+          <td colspan="4">No utilization data for this period.</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="split-grid">
+  <article class="panel">
+    <h3>Hourly load</h3>
+    <div class="table-wrap compact">
+      <table>
+        <thead>
+          <tr>
+            <th>Hour</th>
+            <th>Minutes</th>
+            <th>Share %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Report.Stats.HourLoads}}
+          <tr>
+            <td>{{.Hour}}</td>
+            <td>{{.BookedMinutes}}</td>
+            <td>{{formatPercent .SharePercent}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <h3>Weekday load</h3>
+    <div class="table-wrap compact">
+      <table>
+        <thead>
+          <tr>
+            <th>Weekday</th>
+            <th>Minutes</th>
+            <th>Share %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Report.Stats.WeekdayLoads}}
+          <tr>
+            <td>{{.Weekday}}</td>
+            <td>{{.BookedMinutes}}</td>
+            <td>{{formatPercent .SharePercent}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{{end}}
+{{end}}

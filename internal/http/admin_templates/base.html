@@ -1,0 +1,51 @@
+{{define "admin_layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body>
+  {{if eq .ContentTemplate "login_content"}}
+    <main class="login-shell">
+      {{template "login_content" .}}
+    </main>
+  {{else}}
+    <div class="admin-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Local Admin</p>
+          <h1>Resource Control</h1>
+          <p class="muted">{{.Admin.FullName}}</p>
+        </div>
+        <nav class="nav">
+          <a href="/admin/ui" class="{{if eq .ActiveTab "dashboard"}}active{{end}}">Dashboard</a>
+          <a href="/admin/ui/resources" class="{{if eq .ActiveTab "resources"}}active{{end}}">Resources</a>
+          <a href="/admin/ui/bookings" class="{{if eq .ActiveTab "bookings"}}active{{end}}">Bookings</a>
+          <a href="/admin/ui/reports/utilization" class="{{if eq .ActiveTab "reports"}}active{{end}}">Reports</a>
+        </nav>
+        <form method="post" action="/admin/ui/logout">
+          <button class="ghost" type="submit">Sign out</button>
+        </form>
+      </aside>
+      <main class="content">
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">Admin UI</p>
+            <h2>{{.Title}}</h2>
+          </div>
+        </header>
+        {{if .Notice}}<div class="flash notice">{{.Notice}}</div>{{end}}
+        {{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
+        {{if eq .ContentTemplate "dashboard_content"}}{{template "dashboard_content" .}}{{end}}
+        {{if eq .ContentTemplate "resources_content"}}{{template "resources_content" .}}{{end}}
+        {{if eq .ContentTemplate "bookings_content"}}{{template "bookings_content" .}}{{end}}
+        {{if eq .ContentTemplate "reports_content"}}{{template "reports_content" .}}{{end}}
+      </main>
+    </div>
+  {{end}}
+</body>
+</html>
+{{end}}
