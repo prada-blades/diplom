@@ -121,6 +121,10 @@ button {
   margin-bottom: 20px;
 }
 
+.stats-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .split-grid {
   grid-template-columns: minmax(320px, 420px) 1fr;
 }
@@ -198,6 +202,10 @@ button:hover,
 .filter-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 0;
+}
+
+.filter-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 label {

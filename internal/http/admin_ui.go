@@ -2,6 +2,7 @@ package http
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io/fs"
 	nethttp "net/http"
@@ -21,11 +22,15 @@ var adminUIFiles embed.FS
 
 var (
 	adminTemplates = template.Must(template.New("admin").Funcs(template.FuncMap{
-		"formatTime":       formatAdminTime,
-		"formatDateTime":   formatDateTime,
-		"formatPercent":    formatPercent,
-		"datetimeLocal":    formatDateTimeLocal,
-		"selectedResource": selectedResource,
+		"formatTime":        formatAdminTime,
+		"formatDateTime":    formatDateTime,
+		"formatPercent":     formatPercent,
+		"selectedResource":  selectedID,
+		"selectedUser":      selectedID,
+		"roleLabel":         roleLabel,
+		"statusLabel":       statusLabel,
+		"resourceTypeLabel": resourceTypeLabel,
+		"weekdayLabel":      weekdayLabel,
 	}).ParseFS(adminUIFiles, "admin_templates/*.html"))
 	adminStaticFS = mustSubFS(adminUIFiles, "admin_assets")
 )
@@ -43,17 +48,26 @@ type adminPageData struct {
 	ResourceTypes  []domain.ResourceType
 	ResourceForm   adminResourceForm
 	EditResourceID int64
-	Bookings       []adminBookingView
-	StatusFilter   string
-	ResourceFilter string
-	StartFilter    string
-	EndFilter      string
-	Report         *service.UtilizationReport
-	ReportStart    string
-	ReportEnd      string
+
+	Users      []domain.User
+	UserRoles  []domain.Role
+	UserForm   adminUserForm
+	EditUserID int64
+
+	Bookings          []adminBookingView
+	BookingCreateForm adminBookingCreateForm
+	StatusFilter      string
+	ResourceFilter    string
+	UserFilter        string
+	StartFilter       string
+	EndFilter         string
+	Report            *service.UtilizationReport
+	ReportStart       string
+	ReportEnd         string
 }
 
 type adminDashboardStats struct {
+	UsersCount           int
 	ResourcesCount       int
 	ActiveResourcesCount int
 	BookingsCount        int
@@ -70,11 +84,29 @@ type adminResourceForm struct {
 	IsActive    bool
 }
 
+type adminUserForm struct {
+	ID       int64
+	FullName string
+	Email    string
+	Password string
+	Role     domain.Role
+}
+
+type adminBookingCreateForm struct {
+	UserID     string
+	ResourceID string
+	StartTime  string
+	EndTime    string
+	Purpose    string
+}
+
 type adminBookingView struct {
 	ID           int64
 	ResourceID   int64
 	ResourceName string
 	UserID       int64
+	UserName     string
+	UserEmail    string
 	StartTime    time.Time
 	EndTime      time.Time
 	Status       domain.BookingStatus
@@ -88,6 +120,8 @@ func (a *App) registerAdminUIRoutes(mux *nethttp.ServeMux) {
 	mux.Handle("/admin/ui", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIDashboard)))
 	mux.Handle("/admin/ui/resources", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIResources)))
 	mux.Handle("/admin/ui/resources/", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIResourceAction)))
+	mux.Handle("/admin/ui/users", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIUsers)))
+	mux.Handle("/admin/ui/users/", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIUserAction)))
 	mux.Handle("/admin/ui/bookings", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIBookings)))
 	mux.Handle("/admin/ui/bookings/", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIBookingAction)))
 	mux.Handle("/admin/ui/reports/utilization", a.requireAdminSession(nethttp.HandlerFunc(a.handleAdminUIReports)))
@@ -100,7 +134,7 @@ func (a *App) handleAdminUILogin(w nethttp.ResponseWriter, r *nethttp.Request) {
 			return
 		}
 		a.renderAdminTemplate(w, adminPageData{
-			Title:           "Admin Login",
+			Title:           "Вход в админку",
 			ContentTemplate: "login_content",
 			Error:           r.URL.Query().Get("error"),
 			Notice:          r.URL.Query().Get("notice"),
@@ -115,9 +149,9 @@ func (a *App) handleAdminUILogin(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	if err := r.ParseForm(); err != nil {
 		a.renderAdminTemplate(w, adminPageData{
-			Title:           "Admin Login",
+			Title:           "Вход в админку",
 			ContentTemplate: "login_content",
-			Error:           "Could not read login form.",
+			Error:           "Не удалось прочитать форму входа.",
 		})
 		return
 	}
@@ -128,9 +162,9 @@ func (a *App) handleAdminUILogin(w nethttp.ResponseWriter, r *nethttp.Request) {
 	user, token, err := a.authService.Login(email, password)
 	if err != nil || user.Role != domain.RoleAdmin {
 		a.renderAdminTemplate(w, adminPageData{
-			Title:           "Admin Login",
+			Title:           "Вход в админку",
 			ContentTemplate: "login_content",
-			Error:           "Invalid admin credentials.",
+			Error:           "Неверные учётные данные администратора.",
 		})
 		return
 	}
@@ -146,7 +180,7 @@ func (a *App) handleAdminUILogout(w nethttp.ResponseWriter, r *nethttp.Request) 
 	}
 
 	a.clearAdminSessionCookie(w)
-	nethttp.Redirect(w, r, "/admin/ui/login?notice="+url.QueryEscape("Signed out."), nethttp.StatusSeeOther)
+	nethttp.Redirect(w, r, "/admin/ui/login?notice="+url.QueryEscape("Вы вышли из админки."), nethttp.StatusSeeOther)
 }
 
 func (a *App) handleAdminUIDashboard(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -156,8 +190,10 @@ func (a *App) handleAdminUIDashboard(w nethttp.ResponseWriter, r *nethttp.Reques
 	}
 
 	admin := currentUser(r)
+	users := a.authService.ListUsers()
 	resources := a.resourceService.List("", false)
 	bookings := a.bookingService.ListAll()
+
 	activeResources := 0
 	activeBookings := 0
 	for _, resource := range resources {
@@ -172,12 +208,13 @@ func (a *App) handleAdminUIDashboard(w nethttp.ResponseWriter, r *nethttp.Reques
 	}
 
 	a.renderAdminTemplate(w, adminPageData{
-		Title:           "Admin Dashboard",
+		Title:           "Панель администратора",
 		ContentTemplate: "dashboard_content",
 		ActiveTab:       "dashboard",
 		Admin:           admin,
 		Notice:          r.URL.Query().Get("notice"),
 		Stats: adminDashboardStats{
+			UsersCount:           len(users),
 			ResourcesCount:       len(resources),
 			ActiveResourcesCount: activeResources,
 			BookingsCount:        len(bookings),
@@ -212,7 +249,7 @@ func (a *App) handleAdminUIResources(w nethttp.ResponseWriter, r *nethttp.Reques
 	case nethttp.MethodPost:
 		if err := r.ParseForm(); err != nil {
 			data := a.newAdminResourcesPage(admin)
-			data.Error = "Could not read resource form."
+			data.Error = "Не удалось прочитать форму ресурса."
 			a.renderAdminTemplate(w, data)
 			return
 		}
@@ -228,13 +265,13 @@ func (a *App) handleAdminUIResources(w nethttp.ResponseWriter, r *nethttp.Reques
 
 		if _, err := a.resourceService.Create(form.Name, form.Type, form.Location, form.Capacity, form.Description); err != nil {
 			data := a.newAdminResourcesPage(admin)
-			data.Error = err.Error()
+			data.Error = translateAdminError(err.Error())
 			data.ResourceForm = form
 			a.renderAdminTemplate(w, data)
 			return
 		}
 
-		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Resource created."), nethttp.StatusSeeOther)
+		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Ресурс создан."), nethttp.StatusSeeOther)
 	default:
 		nethttp.Error(w, "method not allowed", nethttp.StatusMethodNotAllowed)
 	}
@@ -257,7 +294,7 @@ func (a *App) handleAdminUIResourceAction(w nethttp.ResponseWriter, r *nethttp.R
 	case "update":
 		if err := r.ParseForm(); err != nil {
 			data := a.newAdminResourcesPage(admin)
-			data.Error = "Could not read resource form."
+			data.Error = "Не удалось прочитать форму ресурса."
 			a.renderAdminTemplate(w, data)
 			return
 		}
@@ -276,7 +313,7 @@ func (a *App) handleAdminUIResourceAction(w nethttp.ResponseWriter, r *nethttp.R
 		isActive := r.FormValue("is_active") == "on"
 		if _, err := a.resourceService.Update(id, form.Name, form.Type, form.Location, form.Capacity, form.Description, isActive); err != nil {
 			data := a.newAdminResourcesPage(admin)
-			data.Error = err.Error()
+			data.Error = translateAdminError(err.Error())
 			data.ResourceForm = form
 			data.ResourceForm.IsActive = isActive
 			data.EditResourceID = id
@@ -284,55 +321,166 @@ func (a *App) handleAdminUIResourceAction(w nethttp.ResponseWriter, r *nethttp.R
 			return
 		}
 
-		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Resource updated."), nethttp.StatusSeeOther)
+		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Ресурс обновлён."), nethttp.StatusSeeOther)
 	case "disable":
 		if _, err := a.resourceService.Disable(id); err != nil {
-			nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Could not disable resource."), nethttp.StatusSeeOther)
+			nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Не удалось отключить ресурс."), nethttp.StatusSeeOther)
 			return
 		}
-		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Resource disabled."), nethttp.StatusSeeOther)
+		nethttp.Redirect(w, r, "/admin/ui/resources?notice="+url.QueryEscape("Ресурс отключён."), nethttp.StatusSeeOther)
 	default:
 		nethttp.NotFound(w, r)
 	}
 }
 
-func (a *App) handleAdminUIBookings(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodGet {
+func (a *App) handleAdminUIUsers(w nethttp.ResponseWriter, r *nethttp.Request) {
+	admin := currentUser(r)
+	switch r.Method {
+	case nethttp.MethodGet:
+		data := a.newAdminUsersPage(admin)
+		data.Notice = r.URL.Query().Get("notice")
+		if editRaw := r.URL.Query().Get("edit"); editRaw != "" {
+			if id, err := strconv.ParseInt(editRaw, 10, 64); err == nil {
+				if user, err := a.authService.GetUser(id); err == nil {
+					data.UserForm = adminUserForm{
+						ID:       user.ID,
+						FullName: user.FullName,
+						Email:    user.Email,
+						Role:     user.Role,
+					}
+					data.EditUserID = user.ID
+				}
+			}
+		}
+		a.renderAdminTemplate(w, data)
+	case nethttp.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			data := a.newAdminUsersPage(admin)
+			data.Error = "Не удалось прочитать форму пользователя."
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		form := parseAdminUserForm(r)
+		if strings.TrimSpace(form.Password) == "" {
+			data := a.newAdminUsersPage(admin)
+			data.Error = "Пароль обязателен для нового пользователя."
+			data.UserForm = form
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		if _, _, err := a.authService.Register(form.FullName, form.Email, form.Password, form.Role); err != nil {
+			data := a.newAdminUsersPage(admin)
+			data.Error = translateAdminError(err.Error())
+			data.UserForm = form
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		nethttp.Redirect(w, r, "/admin/ui/users?notice="+url.QueryEscape("Пользователь создан."), nethttp.StatusSeeOther)
+	default:
+		nethttp.Error(w, "method not allowed", nethttp.StatusMethodNotAllowed)
+	}
+}
+
+func (a *App) handleAdminUIUserAction(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if r.Method != nethttp.MethodPost {
 		nethttp.Error(w, "method not allowed", nethttp.StatusMethodNotAllowed)
 		return
 	}
 
+	id, action, ok := parseAdminEntityAction(r.URL.Path, "/admin/ui/users/")
+	if !ok || action != "update" {
+		nethttp.NotFound(w, r)
+		return
+	}
+
 	admin := currentUser(r)
-	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
-	resourceFilter := strings.TrimSpace(r.URL.Query().Get("resource_id"))
-	startFilter := strings.TrimSpace(r.URL.Query().Get("start"))
-	endFilter := strings.TrimSpace(r.URL.Query().Get("end"))
-
-	bookings := a.bookingService.ListAll()
-	resources := a.resourceService.List("", false)
-	resourceByID := make(map[int64]domain.Resource, len(resources))
-	for _, resource := range resources {
-		resourceByID[resource.ID] = resource
+	if err := r.ParseForm(); err != nil {
+		data := a.newAdminUsersPage(admin)
+		data.Error = "Не удалось прочитать форму пользователя."
+		a.renderAdminTemplate(w, data)
+		return
 	}
 
-	filtered, err := filterAdminBookings(bookings, resourceByID, statusFilter, resourceFilter, startFilter, endFilter)
-	data := adminPageData{
-		Title:           "Admin Bookings",
-		ContentTemplate: "bookings_content",
-		ActiveTab:       "bookings",
-		Admin:           admin,
-		Notice:          r.URL.Query().Get("notice"),
-		Resources:       resources,
-		Bookings:        filtered,
-		StatusFilter:    statusFilter,
-		ResourceFilter:  resourceFilter,
-		StartFilter:     startFilter,
-		EndFilter:       endFilter,
+	form := parseAdminUserForm(r)
+	form.ID = id
+	if _, err := a.authService.UpdateUser(id, form.FullName, form.Email, form.Role); err != nil {
+		data := a.newAdminUsersPage(admin)
+		data.Error = translateAdminError(err.Error())
+		data.UserForm = form
+		data.EditUserID = id
+		a.renderAdminTemplate(w, data)
+		return
 	}
-	if err != nil {
-		data.Error = err.Error()
+
+	nethttp.Redirect(w, r, "/admin/ui/users?notice="+url.QueryEscape("Пользователь обновлён."), nethttp.StatusSeeOther)
+}
+
+func (a *App) handleAdminUIBookings(w nethttp.ResponseWriter, r *nethttp.Request) {
+	admin := currentUser(r)
+	switch r.Method {
+	case nethttp.MethodGet:
+		data := a.newAdminBookingsPage(admin)
+		data.Notice = r.URL.Query().Get("notice")
+		populateAdminBookingFilters(&data, r)
+		a.populateBookingsList(&data)
+		a.renderAdminTemplate(w, data)
+	case nethttp.MethodPost:
+		if err := r.ParseForm(); err != nil {
+			data := a.newAdminBookingsPage(admin)
+			data.Error = "Не удалось прочитать форму бронирования."
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		data := a.newAdminBookingsPage(admin)
+		populateAdminBookingFilters(&data, r)
+		data.BookingCreateForm = parseAdminBookingCreateForm(r)
+
+		userID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("user_id")), 10, 64)
+		if err != nil {
+			data.Error = "Пользователь должен быть выбран."
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+		resourceID, err := strconv.ParseInt(strings.TrimSpace(r.FormValue("resource_id")), 10, 64)
+		if err != nil {
+			data.Error = "Ресурс должен быть выбран."
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		start, err := parseAdminDateTime(strings.TrimSpace(r.FormValue("start_time")))
+		if err != nil {
+			data.Error = "Дата начала должна быть указана в локальном формате."
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+		end, err := parseAdminDateTime(strings.TrimSpace(r.FormValue("end_time")))
+		if err != nil {
+			data.Error = "Дата окончания должна быть указана в локальном формате."
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		if _, err := a.bookingService.Create(userID, resourceID, start, end, strings.TrimSpace(r.FormValue("purpose"))); err != nil {
+			data.Error = translateAdminError(err.Error())
+			a.populateBookingsList(&data)
+			a.renderAdminTemplate(w, data)
+			return
+		}
+
+		nethttp.Redirect(w, r, "/admin/ui/bookings?notice="+url.QueryEscape("Бронирование создано."), nethttp.StatusSeeOther)
+	default:
+		nethttp.Error(w, "method not allowed", nethttp.StatusMethodNotAllowed)
 	}
-	a.renderAdminTemplate(w, data)
 }
 
 func (a *App) handleAdminUIBookingAction(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -348,11 +496,11 @@ func (a *App) handleAdminUIBookingAction(w nethttp.ResponseWriter, r *nethttp.Re
 	}
 
 	if _, err := a.bookingService.Cancel(currentUser(r), id); err != nil {
-		nethttp.Redirect(w, r, "/admin/ui/bookings?notice="+url.QueryEscape("Could not cancel booking."), nethttp.StatusSeeOther)
+		nethttp.Redirect(w, r, "/admin/ui/bookings?notice="+url.QueryEscape("Не удалось отменить бронь."), nethttp.StatusSeeOther)
 		return
 	}
 
-	nethttp.Redirect(w, r, "/admin/ui/bookings?notice="+url.QueryEscape("Booking cancelled."), nethttp.StatusSeeOther)
+	nethttp.Redirect(w, r, "/admin/ui/bookings?notice="+url.QueryEscape("Бронь отменена."), nethttp.StatusSeeOther)
 }
 
 func (a *App) handleAdminUIReports(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -367,7 +515,7 @@ func (a *App) handleAdminUIReports(w nethttp.ResponseWriter, r *nethttp.Request)
 	start, end, err := parseAdminDateRange(startValue, endValue)
 
 	data := adminPageData{
-		Title:           "Utilization Report",
+		Title:           "Отчёт по загрузке",
 		ContentTemplate: "reports_content",
 		ActiveTab:       "reports",
 		Admin:           admin,
@@ -382,7 +530,7 @@ func (a *App) handleAdminUIReports(w nethttp.ResponseWriter, r *nethttp.Request)
 
 	report, err := a.bookingService.UtilizationReport(start, end)
 	if err != nil {
-		data.Error = err.Error()
+		data.Error = translateAdminError(err.Error())
 		a.renderAdminTemplate(w, data)
 		return
 	}
@@ -396,13 +544,11 @@ func (a *App) requireAdminSession(next nethttp.Handler) nethttp.Handler {
 		user, ok := a.authenticatedAdminFromSession(r)
 		if !ok {
 			a.clearAdminSessionCookie(w)
-			nethttp.Redirect(w, r, "/admin/ui/login?error="+url.QueryEscape("Please sign in as admin."), nethttp.StatusSeeOther)
+			nethttp.Redirect(w, r, "/admin/ui/login?error="+url.QueryEscape("Войдите под учётной записью администратора."), nethttp.StatusSeeOther)
 			return
 		}
 
-		ctx := r.Context()
-		ctx = withUser(ctx, user)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r.WithContext(withUser(r.Context(), user)))
 	})
 }
 
@@ -450,7 +596,7 @@ func (a *App) renderAdminTemplate(w nethttp.ResponseWriter, data adminPageData) 
 
 func (a *App) newAdminResourcesPage(admin domain.User) adminPageData {
 	return adminPageData{
-		Title:           "Manage Resources",
+		Title:           "Ресурсы",
 		ContentTemplate: "resources_content",
 		ActiveTab:       "resources",
 		Admin:           admin,
@@ -466,6 +612,53 @@ func (a *App) newAdminResourcesPage(admin domain.User) adminPageData {
 	}
 }
 
+func (a *App) newAdminUsersPage(admin domain.User) adminPageData {
+	return adminPageData{
+		Title:           "Пользователи",
+		ContentTemplate: "users_content",
+		ActiveTab:       "users",
+		Admin:           admin,
+		Users:           a.authService.ListUsers(),
+		UserRoles:       []domain.Role{domain.RoleEmployee, domain.RoleAdmin},
+		UserForm: adminUserForm{
+			Role: domain.RoleEmployee,
+		},
+	}
+}
+
+func (a *App) newAdminBookingsPage(admin domain.User) adminPageData {
+	now := time.Now().Local().Add(2 * time.Hour).Truncate(15 * time.Minute)
+	return adminPageData{
+		Title:           "Бронирования",
+		ContentTemplate: "bookings_content",
+		ActiveTab:       "bookings",
+		Admin:           admin,
+		Users:           a.authService.ListUsers(),
+		Resources:       a.resourceService.List("", false),
+		BookingCreateForm: adminBookingCreateForm{
+			StartTime: formatDateTimeLocal(now),
+			EndTime:   formatDateTimeLocal(now.Add(time.Hour)),
+		},
+	}
+}
+
+func (a *App) populateBookingsList(data *adminPageData) {
+	resourceByID := make(map[int64]domain.Resource, len(data.Resources))
+	for _, resource := range data.Resources {
+		resourceByID[resource.ID] = resource
+	}
+	userByID := make(map[int64]domain.User, len(data.Users))
+	for _, user := range data.Users {
+		userByID[user.ID] = user
+	}
+
+	filtered, err := filterAdminBookings(a.bookingService.ListAll(), resourceByID, userByID, data.StatusFilter, data.ResourceFilter, data.UserFilter, data.StartFilter, data.EndFilter)
+	data.Bookings = filtered
+	if err != nil {
+		data.Error = err.Error()
+	}
+}
+
 func parseAdminResourceForm(r *nethttp.Request) (adminResourceForm, error) {
 	form := adminResourceForm{
 		Name:        strings.TrimSpace(r.FormValue("name")),
@@ -478,7 +671,7 @@ func parseAdminResourceForm(r *nethttp.Request) (adminResourceForm, error) {
 	if rawCapacity := strings.TrimSpace(r.FormValue("capacity")); rawCapacity != "" {
 		capacity, err := strconv.Atoi(rawCapacity)
 		if err != nil {
-			return form, errInvalidCapacity
+			return form, adminFormError("Вместимость должна быть числом.")
 		}
 		form.Capacity = capacity
 	}
@@ -490,7 +683,29 @@ func parseAdminResourceForm(r *nethttp.Request) (adminResourceForm, error) {
 	return form, nil
 }
 
-var errInvalidCapacity = adminFormError("Capacity must be a number.")
+func parseAdminUserForm(r *nethttp.Request) adminUserForm {
+	role := domain.Role(strings.TrimSpace(r.FormValue("role")))
+	if role == "" {
+		role = domain.RoleEmployee
+	}
+
+	return adminUserForm{
+		FullName: strings.TrimSpace(r.FormValue("full_name")),
+		Email:    strings.TrimSpace(r.FormValue("email")),
+		Password: r.FormValue("password"),
+		Role:     role,
+	}
+}
+
+func parseAdminBookingCreateForm(r *nethttp.Request) adminBookingCreateForm {
+	return adminBookingCreateForm{
+		UserID:     strings.TrimSpace(r.FormValue("user_id")),
+		ResourceID: strings.TrimSpace(r.FormValue("resource_id")),
+		StartTime:  strings.TrimSpace(r.FormValue("start_time")),
+		EndTime:    strings.TrimSpace(r.FormValue("end_time")),
+		Purpose:    strings.TrimSpace(r.FormValue("purpose")),
+	}
+}
 
 type adminFormError string
 
@@ -511,9 +726,10 @@ func parseAdminEntityAction(path, prefix string) (int64, string, bool) {
 	return id, parts[1], true
 }
 
-func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domain.Resource, statusFilter, resourceFilter, startFilter, endFilter string) ([]adminBookingView, error) {
+func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domain.Resource, userByID map[int64]domain.User, statusFilter, resourceFilter, userFilter, startFilter, endFilter string) ([]adminBookingView, error) {
 	var (
 		resourceID int64
+		userID     int64
 		err        error
 		start      time.Time
 		end        time.Time
@@ -522,19 +738,25 @@ func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domai
 	if resourceFilter != "" {
 		resourceID, err = strconv.ParseInt(resourceFilter, 10, 64)
 		if err != nil {
-			return nil, adminFormError("Resource filter must be a valid ID.")
+			return nil, adminFormError("Фильтр ресурса должен содержать корректный ID.")
+		}
+	}
+	if userFilter != "" {
+		userID, err = strconv.ParseInt(userFilter, 10, 64)
+		if err != nil {
+			return nil, adminFormError("Фильтр пользователя должен содержать корректный ID.")
 		}
 	}
 	if startFilter != "" {
 		start, err = parseAdminDateTime(startFilter)
 		if err != nil {
-			return nil, adminFormError("Start filter must use local date and time.")
+			return nil, adminFormError("Дата начала фильтра должна быть в локальном формате.")
 		}
 	}
 	if endFilter != "" {
 		end, err = parseAdminDateTime(endFilter)
 		if err != nil {
-			return nil, adminFormError("End filter must use local date and time.")
+			return nil, adminFormError("Дата окончания фильтра должна быть в локальном формате.")
 		}
 	}
 
@@ -546,6 +768,9 @@ func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domai
 		if resourceID != 0 && booking.ResourceID != resourceID {
 			continue
 		}
+		if userID != 0 && booking.UserID != userID {
+			continue
+		}
 		if !start.IsZero() && booking.EndTime.Before(start) {
 			continue
 		}
@@ -553,9 +778,15 @@ func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domai
 			continue
 		}
 
-		resourceName := "Unknown resource"
+		resourceName := fmt.Sprintf("Ресурс #%d", booking.ResourceID)
 		if resource, ok := resourceByID[booking.ResourceID]; ok {
 			resourceName = resource.Name
+		}
+		userName := fmt.Sprintf("Пользователь #%d", booking.UserID)
+		userEmail := ""
+		if user, ok := userByID[booking.UserID]; ok {
+			userName = user.FullName
+			userEmail = user.Email
 		}
 
 		filtered = append(filtered, adminBookingView{
@@ -563,6 +794,8 @@ func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domai
 			ResourceID:   booking.ResourceID,
 			ResourceName: resourceName,
 			UserID:       booking.UserID,
+			UserName:     userName,
+			UserEmail:    userEmail,
 			StartTime:    booking.StartTime,
 			EndTime:      booking.EndTime,
 			Status:       booking.Status,
@@ -573,6 +806,14 @@ func filterAdminBookings(bookings []domain.Booking, resourceByID map[int64]domai
 	return filtered, nil
 }
 
+func populateAdminBookingFilters(data *adminPageData, r *nethttp.Request) {
+	data.StatusFilter = strings.TrimSpace(r.FormValue("status"))
+	data.ResourceFilter = strings.TrimSpace(r.FormValue("resource_id"))
+	data.UserFilter = strings.TrimSpace(r.FormValue("user_id"))
+	data.StartFilter = strings.TrimSpace(r.FormValue("start"))
+	data.EndFilter = strings.TrimSpace(r.FormValue("end"))
+}
+
 func parseAdminDateRange(startValue, endValue string) (time.Time, time.Time, error) {
 	if startValue == "" && endValue == "" {
 		end := time.Now().UTC().Truncate(time.Minute)
@@ -580,19 +821,19 @@ func parseAdminDateRange(startValue, endValue string) (time.Time, time.Time, err
 		return start, end, nil
 	}
 	if startValue == "" || endValue == "" {
-		return time.Time{}, time.Time{}, adminFormError("Both report dates are required.")
+		return time.Time{}, time.Time{}, adminFormError("Нужно указать обе границы периода.")
 	}
 
 	start, err := parseAdminDateTime(startValue)
 	if err != nil {
-		return time.Time{}, time.Time{}, adminFormError("Report start must use local date and time.")
+		return time.Time{}, time.Time{}, adminFormError("Начало периода должно быть в локальном формате.")
 	}
 	end, err := parseAdminDateTime(endValue)
 	if err != nil {
-		return time.Time{}, time.Time{}, adminFormError("Report end must use local date and time.")
+		return time.Time{}, time.Time{}, adminFormError("Конец периода должен быть в локальном формате.")
 	}
 	if !start.Before(end) {
-		return time.Time{}, time.Time{}, adminFormError("Report start must be before report end.")
+		return time.Time{}, time.Time{}, adminFormError("Начало периода должно быть раньше конца.")
 	}
 
 	return start, end, nil
@@ -610,26 +851,26 @@ func mustSubFS(root fs.FS, dir string) fs.FS {
 	return sub
 }
 
-func selectedResource(resourceID int64, value string) bool {
+func selectedID(id int64, value string) bool {
 	if value == "" {
 		return false
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
-	return err == nil && parsed == resourceID
+	return err == nil && parsed == id
 }
 
 func formatAdminTime(value time.Time) string {
 	if value.IsZero() {
 		return ""
 	}
-	return value.Local().Format("02 Jan 2006 15:04")
+	return value.Local().Format("02.01.2006 15:04")
 }
 
 func formatDateTime(value time.Time) string {
 	if value.IsZero() {
 		return ""
 	}
-	return value.Local().Format("02 Jan 2006 15:04 MST")
+	return value.Local().Format("02.01.2006 15:04")
 }
 
 func formatDateTimeLocal(value time.Time) string {
@@ -641,4 +882,116 @@ func formatDateTimeLocal(value time.Time) string {
 
 func formatPercent(value float64) string {
 	return strconv.FormatFloat(value, 'f', 1, 64)
+}
+
+func roleLabel(role any) string {
+	switch typed := role.(type) {
+	case domain.Role:
+		switch typed {
+		case domain.RoleAdmin:
+			return "Администратор"
+		case domain.RoleEmployee:
+			return "Сотрудник"
+		default:
+			return string(typed)
+		}
+	case string:
+		return roleLabel(domain.Role(typed))
+	default:
+		return fmt.Sprint(role)
+	}
+}
+
+func statusLabel(status any) string {
+	switch typed := status.(type) {
+	case domain.BookingStatus:
+		switch typed {
+		case domain.BookingActive:
+			return "Активна"
+		case domain.BookingCancelled:
+			return "Отменена"
+		default:
+			return string(typed)
+		}
+	case string:
+		return statusLabel(domain.BookingStatus(typed))
+	default:
+		return fmt.Sprint(status)
+	}
+}
+
+func resourceTypeLabel(resourceType any) string {
+	switch typed := resourceType.(type) {
+	case domain.ResourceType:
+		switch typed {
+		case domain.ResourceMeetingRoom:
+			return "Переговорная"
+		case domain.ResourceWorkspace:
+			return "Рабочее место"
+		default:
+			return string(typed)
+		}
+	case string:
+		return resourceTypeLabel(domain.ResourceType(typed))
+	default:
+		return fmt.Sprint(resourceType)
+	}
+}
+
+func weekdayLabel(value string) string {
+	switch strings.ToLower(value) {
+	case "monday":
+		return "Понедельник"
+	case "tuesday":
+		return "Вторник"
+	case "wednesday":
+		return "Среда"
+	case "thursday":
+		return "Четверг"
+	case "friday":
+		return "Пятница"
+	case "saturday":
+		return "Суббота"
+	case "sunday":
+		return "Воскресенье"
+	default:
+		return value
+	}
+}
+
+func translateAdminError(message string) string {
+	switch message {
+	case "full_name, email and password are required":
+		return "Нужно указать ФИО, email и пароль."
+	case "full_name and email are required":
+		return "Нужно указать ФИО и email."
+	case "invalid credentials":
+		return "Неверные учётные данные."
+	case "invalid role":
+		return "Указана некорректная роль."
+	case "email already exists":
+		return "Пользователь с таким email уже существует."
+	case "name, type and location are required":
+		return "Нужно указать название, тип и расположение."
+	case "invalid resource type":
+		return "Указан некорректный тип ресурса."
+	case "meeting room capacity must be positive":
+		return "Для переговорной вместимость должна быть больше нуля."
+	case "resource not found":
+		return "Ресурс не найден."
+	case "resource is inactive":
+		return "Ресурс отключён."
+	case "start_time must be before end_time":
+		return "Время начала должно быть раньше времени окончания."
+	case "cannot book in the past":
+		return "Нельзя создать бронь в прошлом."
+	case "resource already booked for selected time":
+		return "Ресурс уже занят на выбранное время."
+	case "booking not found":
+		return "Бронь не найдена."
+	case "forbidden":
+		return "Недостаточно прав для этой операции."
+	default:
+		return message
+	}
 }

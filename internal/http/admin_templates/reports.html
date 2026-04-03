@@ -1,44 +1,44 @@
 {{define "reports_content"}}
 <section class="panel">
-  <h3>Period</h3>
+  <h3>Период отчёта</h3>
   <form method="get" action="/admin/ui/reports/utilization" class="filter-grid">
     <label>
-      <span>Start</span>
+      <span>Начало</span>
       <input type="datetime-local" name="start" value="{{.ReportStart}}" required>
     </label>
     <label>
-      <span>End</span>
+      <span>Конец</span>
       <input type="datetime-local" name="end" value="{{.ReportEnd}}" required>
     </label>
     <div class="actions">
-      <button type="submit">Build report</button>
+      <button type="submit">Построить отчёт</button>
     </div>
   </form>
 </section>
 {{if .Report}}
 <section class="panel">
-  <h3>Resource utilization</h3>
+  <h3>Загрузка ресурсов</h3>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Resource</th>
-          <th>Type</th>
-          <th>Booked minutes</th>
-          <th>Utilization %</th>
+          <th>Ресурс</th>
+          <th>Тип</th>
+          <th>Забронировано, минут</th>
+          <th>Загрузка, %</th>
         </tr>
       </thead>
       <tbody>
         {{range .Report.Items}}
         <tr>
           <td>{{.ResourceName}} (#{{.ResourceID}})</td>
-          <td>{{.ResourceType}}</td>
+          <td>{{resourceTypeLabel .ResourceType}}</td>
           <td>{{.BookedMinutes}}</td>
           <td>{{formatPercent .Utilization}}</td>
         </tr>
         {{else}}
         <tr>
-          <td colspan="4">No utilization data for this period.</td>
+          <td colspan="4">За выбранный период данных нет.</td>
         </tr>
         {{end}}
       </tbody>
@@ -47,14 +47,14 @@
 </section>
 <section class="split-grid">
   <article class="panel">
-    <h3>Hourly load</h3>
+    <h3>Почасовая нагрузка</h3>
     <div class="table-wrap compact">
       <table>
         <thead>
           <tr>
-            <th>Hour</th>
-            <th>Minutes</th>
-            <th>Share %</th>
+            <th>Час</th>
+            <th>Минут</th>
+            <th>Доля, %</th>
           </tr>
         </thead>
         <tbody>
@@ -70,20 +70,20 @@
     </div>
   </article>
   <article class="panel">
-    <h3>Weekday load</h3>
+    <h3>Нагрузка по дням недели</h3>
     <div class="table-wrap compact">
       <table>
         <thead>
           <tr>
-            <th>Weekday</th>
-            <th>Minutes</th>
-            <th>Share %</th>
+            <th>День</th>
+            <th>Минут</th>
+            <th>Доля, %</th>
           </tr>
         </thead>
         <tbody>
           {{range .Report.Stats.WeekdayLoads}}
           <tr>
-            <td>{{.Weekday}}</td>
+            <td>{{weekdayLabel .Weekday}}</td>
             <td>{{.BookedMinutes}}</td>
             <td>{{formatPercent .SharePercent}}</td>
           </tr>

@@ -80,6 +80,53 @@ func (s *MemoryStore) GetUserByID(id int64) (domain.User, error) {
 	return user, nil
 }
 
+func (s *MemoryStore) ListUsers() []domain.User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	users := make([]domain.User, 0, len(s.users))
+	for _, user := range s.users {
+		users = append(users, user)
+	}
+
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].ID < users[j].ID
+	})
+
+	return users
+}
+
+func (s *MemoryStore) UpdateUser(id int64, update domain.User) (domain.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, ok := s.users[id]
+	if !ok {
+		return domain.User{}, ErrNotFound
+	}
+
+	email := strings.ToLower(strings.TrimSpace(update.Email))
+	if email == "" {
+		email = current.Email
+	}
+	if existingID, exists := s.usersByEmail[email]; exists && existingID != id {
+		return domain.User{}, errors.New("email already exists")
+	}
+
+	delete(s.usersByEmail, current.Email)
+	update.ID = current.ID
+	update.Email = email
+	update.CreatedAt = current.CreatedAt
+	if update.PasswordHash == "" {
+		update.PasswordHash = current.PasswordHash
+	}
+
+	s.users[id] = update
+	s.usersByEmail[email] = id
+
+	return update, nil
+}
+
 func (s *MemoryStore) CreateResource(resource domain.Resource) (domain.Resource, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

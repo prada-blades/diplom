@@ -1,51 +1,100 @@
 {{define "bookings_content"}}
-<section class="panel">
-  <h3>Filters</h3>
-  <form method="get" action="/admin/ui/bookings" class="filter-grid">
-    <label>
-      <span>Status</span>
-      <select name="status">
-        <option value="">all</option>
-        <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>active</option>
-        <option value="cancelled" {{if eq .StatusFilter "cancelled"}}selected{{end}}>cancelled</option>
-      </select>
-    </label>
-    <label>
-      <span>Resource</span>
-      <select name="resource_id">
-        <option value="">all</option>
-        {{range .Resources}}
-          <option value="{{.ID}}" {{if selectedResource .ID $.ResourceFilter}}selected{{end}}>{{.Name}}</option>
-        {{end}}
-      </select>
-    </label>
-    <label>
-      <span>Start after</span>
-      <input type="datetime-local" name="start" value="{{.StartFilter}}">
-    </label>
-    <label>
-      <span>End before</span>
-      <input type="datetime-local" name="end" value="{{.EndFilter}}">
-    </label>
-    <div class="actions">
-      <button type="submit">Apply filters</button>
-      <a class="button-link secondary" href="/admin/ui/bookings">Reset</a>
-    </div>
-  </form>
+<section class="split-grid">
+  <article class="panel">
+    <h3>Создание брони</h3>
+    <form method="post" action="/admin/ui/bookings" class="form-grid">
+      <label>
+        <span>Пользователь</span>
+        <select name="user_id" required>
+          <option value="">Выберите пользователя</option>
+          {{range .Users}}
+            <option value="{{.ID}}" {{if selectedUser .ID $.BookingCreateForm.UserID}}selected{{end}}>{{.FullName}} ({{.Email}})</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        <span>Ресурс</span>
+        <select name="resource_id" required>
+          <option value="">Выберите ресурс</option>
+          {{range .Resources}}
+            <option value="{{.ID}}" {{if selectedResource .ID $.BookingCreateForm.ResourceID}}selected{{end}}>{{.Name}} ({{resourceTypeLabel .Type}})</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        <span>Начало</span>
+        <input type="datetime-local" name="start_time" required value="{{.BookingCreateForm.StartTime}}">
+      </label>
+      <label>
+        <span>Окончание</span>
+        <input type="datetime-local" name="end_time" required value="{{.BookingCreateForm.EndTime}}">
+      </label>
+      <label class="full">
+        <span>Цель</span>
+        <textarea name="purpose" rows="3">{{.BookingCreateForm.Purpose}}</textarea>
+      </label>
+      <div class="actions full">
+        <button type="submit">Создать бронь</button>
+      </div>
+    </form>
+  </article>
+  <article class="panel">
+    <h3>Фильтры</h3>
+    <form method="get" action="/admin/ui/bookings" class="filter-grid filter-grid-5">
+      <label>
+        <span>Статус</span>
+        <select name="status">
+          <option value="">Все</option>
+          <option value="active" {{if eq .StatusFilter "active"}}selected{{end}}>Активные</option>
+          <option value="cancelled" {{if eq .StatusFilter "cancelled"}}selected{{end}}>Отменённые</option>
+        </select>
+      </label>
+      <label>
+        <span>Пользователь</span>
+        <select name="user_id">
+          <option value="">Все</option>
+          {{range .Users}}
+            <option value="{{.ID}}" {{if selectedUser .ID $.UserFilter}}selected{{end}}>{{.FullName}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        <span>Ресурс</span>
+        <select name="resource_id">
+          <option value="">Все</option>
+          {{range .Resources}}
+            <option value="{{.ID}}" {{if selectedResource .ID $.ResourceFilter}}selected{{end}}>{{.Name}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        <span>Начало не раньше</span>
+        <input type="datetime-local" name="start" value="{{.StartFilter}}">
+      </label>
+      <label>
+        <span>Окончание не позже</span>
+        <input type="datetime-local" name="end" value="{{.EndFilter}}">
+      </label>
+      <div class="actions">
+        <button type="submit">Применить фильтры</button>
+        <a class="button-link secondary" href="/admin/ui/bookings">Сбросить</a>
+      </div>
+    </form>
+  </article>
 </section>
 <section class="panel">
-  <h3>Bookings</h3>
+  <h3>Список броней</h3>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>ID</th>
-          <th>Resource</th>
-          <th>User ID</th>
-          <th>Start</th>
-          <th>End</th>
-          <th>Status</th>
-          <th>Purpose</th>
+          <th>Ресурс</th>
+          <th>Пользователь</th>
+          <th>Начало</th>
+          <th>Окончание</th>
+          <th>Статус</th>
+          <th>Цель</th>
           <th></th>
         </tr>
       </thead>
@@ -54,22 +103,22 @@
         <tr>
           <td>{{.ID}}</td>
           <td>{{.ResourceName}} (#{{.ResourceID}})</td>
-          <td>{{.UserID}}</td>
+          <td>{{.UserName}}{{if .UserEmail}}<br><span class="muted">{{.UserEmail}}</span>{{end}}</td>
           <td>{{formatDateTime .StartTime}}</td>
           <td>{{formatDateTime .EndTime}}</td>
-          <td>{{.Status}}</td>
+          <td>{{statusLabel .Status}}</td>
           <td>{{.Purpose}}</td>
           <td class="row-actions">
             {{if eq .Status "active"}}
             <form method="post" action="/admin/ui/bookings/{{.ID}}/cancel">
-              <button class="danger" type="submit">Cancel</button>
+              <button class="danger" type="submit">Отменить</button>
             </form>
             {{end}}
           </td>
         </tr>
         {{else}}
         <tr>
-          <td colspan="8">No bookings match the selected filters.</td>
+          <td colspan="7">Брони по выбранным фильтрам не найдены.</td>
         </tr>
         {{end}}
       </tbody>

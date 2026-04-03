@@ -1,0 +1,70 @@
+{{define "users_content"}}
+<section class="split-grid">
+  <article class="panel">
+    <h3>{{if .EditUserID}}Редактирование пользователя #{{.EditUserID}}{{else}}Создание пользователя{{end}}</h3>
+    <form method="post" action="{{if .EditUserID}}/admin/ui/users/{{.EditUserID}}/update{{else}}/admin/ui/users{{end}}" class="form-grid">
+      <label>
+        <span>ФИО</span>
+        <input type="text" name="full_name" required value="{{.UserForm.FullName}}">
+      </label>
+      <label>
+        <span>Email</span>
+        <input type="email" name="email" required value="{{.UserForm.Email}}">
+      </label>
+      <label>
+        <span>Роль</span>
+        <select name="role" required>
+          {{range .UserRoles}}
+            <option value="{{.}}" {{if eq $.UserForm.Role .}}selected{{end}}>{{roleLabel .}}</option>
+          {{end}}
+        </select>
+      </label>
+      {{if not .EditUserID}}
+      <label>
+        <span>Пароль</span>
+        <input type="password" name="password" required>
+      </label>
+      {{end}}
+      <div class="actions full">
+        <button type="submit">{{if .EditUserID}}Сохранить{{else}}Создать пользователя{{end}}</button>
+        {{if .EditUserID}}<a class="button-link secondary" href="/admin/ui/users">Новый пользователь</a>{{end}}
+      </div>
+    </form>
+  </article>
+  <article class="panel">
+    <h3>Пользователи системы</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>ФИО</th>
+            <th>Email</th>
+            <th>Роль</th>
+            <th>Создан</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Users}}
+          <tr>
+            <td>{{.ID}}</td>
+            <td>{{.FullName}}</td>
+            <td>{{.Email}}</td>
+            <td>{{roleLabel .Role}}</td>
+            <td>{{formatDateTime .CreatedAt}}</td>
+            <td class="row-actions">
+              <a class="button-link secondary" href="/admin/ui/users?edit={{.ID}}">Изменить</a>
+            </td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="6">Пользователи не найдены.</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+{{end}}

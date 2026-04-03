@@ -1,8 +1,8 @@
 {{define "login_content"}}
 <section class="panel login-panel">
-  <p class="eyebrow">Admin Access</p>
-  <h1>Sign in to the local control panel</h1>
-  <p class="muted">Use an administrator account from the same server.</p>
+  <p class="eyebrow">Доступ администратора</p>
+  <h1>Вход в локальную веб-админку</h1>
+  <p class="muted">Используйте учётную запись администратора этого сервера.</p>
   {{if .Notice}}<div class="flash notice">{{.Notice}}</div>{{end}}
   {{if .Error}}<div class="flash error">{{.Error}}</div>{{end}}
   <form method="post" action="/admin/ui/login" class="form-grid">
@@ -11,10 +11,10 @@
       <input type="email" name="email" required autocomplete="username">
     </label>
     <label>
-      <span>Password</span>
+      <span>Пароль</span>
       <input type="password" name="password" required autocomplete="current-password">
     </label>
-    <button type="submit">Sign in</button>
+    <button type="submit">Войти</button>
   </form>
 </section>
 {{end}}

@@ -79,6 +79,9 @@ func (s *AuthService) Register(fullName, email, password string, role domain.Rol
 	if role == "" {
 		role = domain.RoleEmployee
 	}
+	if role != domain.RoleAdmin && role != domain.RoleEmployee {
+		return domain.User{}, "", errors.New("invalid role")
+	}
 
 	user := domain.User{
 		FullName:     fullName,
@@ -130,6 +133,36 @@ func (s *AuthService) Authenticate(token string) (domain.User, error) {
 	}
 
 	return user, nil
+}
+
+func (s *AuthService) ListUsers() []domain.User {
+	return s.users.ListUsers()
+}
+
+func (s *AuthService) GetUser(id int64) (domain.User, error) {
+	return s.users.GetUserByID(id)
+}
+
+func (s *AuthService) UpdateUser(id int64, fullName, email string, role domain.Role) (domain.User, error) {
+	current, err := s.users.GetUserByID(id)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	fullName = strings.TrimSpace(fullName)
+	email = strings.TrimSpace(strings.ToLower(email))
+	if fullName == "" || email == "" {
+		return domain.User{}, errors.New("full_name and email are required")
+	}
+	if role != domain.RoleAdmin && role != domain.RoleEmployee {
+		return domain.User{}, errors.New("invalid role")
+	}
+
+	current.FullName = fullName
+	current.Email = email
+	current.Role = role
+
+	return s.users.UpdateUser(id, current)
 }
 
 type tokenClaims struct {

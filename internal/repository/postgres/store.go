@@ -150,6 +150,73 @@ func (s *Store) GetUserByID(id int64) (domain.User, error) {
 	return user, nil
 }
 
+func (s *Store) ListUsers() []domain.User {
+	rows, err := s.db.Query(
+		`
+			SELECT id, full_name, email, password_hash, role, created_at
+			FROM users
+			ORDER BY id
+		`,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	users := make([]domain.User, 0)
+	for rows.Next() {
+		var user domain.User
+		var role string
+		if err := rows.Scan(
+			&user.ID,
+			&user.FullName,
+			&user.Email,
+			&user.PasswordHash,
+			&role,
+			&user.CreatedAt,
+		); err != nil {
+			return nil
+		}
+		user.Role = domain.Role(role)
+		users = append(users, user)
+	}
+
+	return users
+}
+
+func (s *Store) UpdateUser(id int64, update domain.User) (domain.User, error) {
+	const query = `
+		UPDATE users
+		SET full_name = $2, email = $3, password_hash = $4, role = $5
+		WHERE id = $1
+	`
+
+	result, err := s.db.Exec(
+		query,
+		id,
+		update.FullName,
+		strings.ToLower(strings.TrimSpace(update.Email)),
+		update.PasswordHash,
+		string(update.Role),
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return domain.User{}, errors.New("email already exists")
+		}
+		return domain.User{}, err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return domain.User{}, err
+	}
+	if rows == 0 {
+		return domain.User{}, repository.ErrNotFound
+	}
+
+	return s.GetUserByID(id)
+}
+
 func (s *Store) CreateResource(resource domain.Resource) (domain.Resource, error) {
 	const query = `
 		INSERT INTO resources (name, type, location, capacity, description, is_active, created_at, updated_at)

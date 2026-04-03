@@ -1,22 +1,28 @@
 {{define "dashboard_content"}}
-<section class="stats-grid">
+<section class="stats-grid stats-grid-3">
   <article class="panel stat-card">
-    <p class="eyebrow">Resources</p>
-    <strong>{{.Stats.ResourcesCount}}</strong>
-    <span>{{.Stats.ActiveResourcesCount}} active</span>
+    <p class="eyebrow">Пользователи</p>
+    <strong>{{.Stats.UsersCount}}</strong>
+    <span>Всего в системе</span>
   </article>
   <article class="panel stat-card">
-    <p class="eyebrow">Bookings</p>
+    <p class="eyebrow">Ресурсы</p>
+    <strong>{{.Stats.ResourcesCount}}</strong>
+    <span>{{.Stats.ActiveResourcesCount}} активных</span>
+  </article>
+  <article class="panel stat-card">
+    <p class="eyebrow">Брони</p>
     <strong>{{.Stats.BookingsCount}}</strong>
-    <span>{{.Stats.ActiveBookingsCount}} active</span>
+    <span>{{.Stats.ActiveBookingsCount}} активных</span>
   </article>
 </section>
 <section class="panel quick-links">
-  <h3>Quick actions</h3>
+  <h3>Быстрые действия</h3>
   <div class="actions">
-    <a class="button-link" href="/admin/ui/resources">Manage resources</a>
-    <a class="button-link" href="/admin/ui/bookings">Review bookings</a>
-    <a class="button-link" href="/admin/ui/reports/utilization">Open reports</a>
+    <a class="button-link" href="/admin/ui/users">Управлять пользователями</a>
+    <a class="button-link" href="/admin/ui/resources">Управлять ресурсами</a>
+    <a class="button-link" href="/admin/ui/bookings">Создать или проверить бронь</a>
+    <a class="button-link" href="/admin/ui/reports/utilization">Открыть отчёт</a>
   </div>
 </section>
 {{end}}
