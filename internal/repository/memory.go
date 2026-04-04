@@ -80,6 +80,22 @@ func (s *MemoryStore) GetUserByID(id int64) (domain.User, error) {
 	return user, nil
 }
 
+func (s *MemoryStore) ListUsers() []domain.User {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	users := make([]domain.User, 0, len(s.users))
+	for _, user := range s.users {
+		users = append(users, user)
+	}
+
+	sort.Slice(users, func(i, j int) bool {
+		return users[i].ID < users[j].ID
+	})
+
+	return users
+}
+
 func (s *MemoryStore) CreateResource(resource domain.Resource) (domain.Resource, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

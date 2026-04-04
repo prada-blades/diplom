@@ -150,6 +150,40 @@ func (s *Store) GetUserByID(id int64) (domain.User, error) {
 	return user, nil
 }
 
+func (s *Store) ListUsers() []domain.User {
+	rows, err := s.db.Query(
+		`
+			SELECT id, full_name, email, password_hash, role, created_at
+			FROM users
+			ORDER BY id
+		`,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	users := make([]domain.User, 0)
+	for rows.Next() {
+		var user domain.User
+		var role string
+		if err := rows.Scan(
+			&user.ID,
+			&user.FullName,
+			&user.Email,
+			&user.PasswordHash,
+			&role,
+			&user.CreatedAt,
+		); err != nil {
+			return nil
+		}
+		user.Role = domain.Role(role)
+		users = append(users, user)
+	}
+
+	return users
+}
+
 func (s *Store) CreateResource(resource domain.Resource) (domain.Resource, error) {
 	const query = `
 		INSERT INTO resources (name, type, location, capacity, description, is_active, created_at, updated_at)
