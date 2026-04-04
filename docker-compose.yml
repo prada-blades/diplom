@@ -4,7 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: diplom-app
-    command: ["./diplom", "server"]
+    entrypoint: ["./diplom"]
+    command: ["server"]
     environment:
       APP_ADDRESS: ":8080"
       APP_DATABASE_URL: "postgres://postgres:postgres@postgres:5432/diplom?sslmode=disable"
