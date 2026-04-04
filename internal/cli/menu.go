@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"diplom/internal/config"
@@ -27,6 +28,7 @@ type Menu struct {
 	logs         LogSource
 	address      string
 	defaultAdmin config.DefaultAdmin
+	readMu       sync.Mutex
 }
 
 func NewMenu(services httpapi.AppServices, logs LogSource, address string, defaultAdmin config.DefaultAdmin, in io.Reader, out io.Writer) *Menu {
@@ -49,6 +51,7 @@ func NewMenu(services httpapi.AppServices, logs LogSource, address string, defau
 
 func (m *Menu) Run() error {
 	for {
+		m.clearScreen()
 		m.printMainMenu()
 
 		choice, err := m.readLine()
@@ -80,9 +83,6 @@ func (m *Menu) Run() error {
 			if err := m.showLogs(); err != nil {
 				return err
 			}
-		case "0":
-			fmt.Fprintln(m.out, "Завершение работы администратора.")
-			return nil
 		default:
 			m.printError("Неверный выбор. Введите цифру из меню.")
 		}
@@ -99,12 +99,13 @@ func (m *Menu) printMainMenu() {
 	fmt.Fprintln(m.out, "3. Бронирования")
 	fmt.Fprintln(m.out, "4. Отчёты")
 	fmt.Fprintln(m.out, "5. Логи")
-	fmt.Fprintln(m.out, "0. Выход")
+	fmt.Fprintln(m.out, "Ctrl+C. Остановить сервер и CLI")
 	fmt.Fprint(m.out, "Выбор: ")
 }
 
 func (m *Menu) runUsersMenu() error {
 	for {
+		m.clearScreen()
 		fmt.Fprintln(m.out)
 		fmt.Fprintln(m.out, "=== Пользователи ===")
 		fmt.Fprintln(m.out, "1. Показать пользователей")
@@ -134,6 +135,7 @@ func (m *Menu) runUsersMenu() error {
 
 func (m *Menu) runResourcesMenu() error {
 	for {
+		m.clearScreen()
 		fmt.Fprintln(m.out)
 		fmt.Fprintln(m.out, "=== Ресурсы ===")
 		fmt.Fprintln(m.out, "1. Показать активные ресурсы")
@@ -171,6 +173,7 @@ func (m *Menu) runResourcesMenu() error {
 
 func (m *Menu) runBookingsMenu() error {
 	for {
+		m.clearScreen()
 		fmt.Fprintln(m.out)
 		fmt.Fprintln(m.out, "=== Бронирования ===")
 		fmt.Fprintln(m.out, "1. Показать все бронирования")
@@ -205,6 +208,7 @@ func (m *Menu) runBookingsMenu() error {
 
 func (m *Menu) runReportsMenu() error {
 	for {
+		m.clearScreen()
 		fmt.Fprintln(m.out)
 		fmt.Fprintln(m.out, "=== Отчёты ===")
 		fmt.Fprintln(m.out, "1. Загрузка ресурсов")
@@ -230,6 +234,7 @@ func (m *Menu) runReportsMenu() error {
 }
 
 func (m *Menu) listUsers() {
+	m.clearScreen()
 	users := m.services.Auth.ListUsers()
 	fmt.Fprintln(m.out)
 	if len(users) == 0 {
@@ -243,6 +248,7 @@ func (m *Menu) listUsers() {
 }
 
 func (m *Menu) createUser() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	fullName, err := m.prompt("ФИО: ")
 	if err != nil {
@@ -271,6 +277,7 @@ func (m *Menu) createUser() error {
 }
 
 func (m *Menu) listResources(onlyActive bool) {
+	m.clearScreen()
 	resources := m.services.Resource.List("", onlyActive)
 	fmt.Fprintln(m.out)
 	if len(resources) == 0 {
@@ -293,6 +300,7 @@ func (m *Menu) listResources(onlyActive bool) {
 }
 
 func (m *Menu) createResource() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	name, err := m.prompt("Название: ")
 	if err != nil {
@@ -325,6 +333,7 @@ func (m *Menu) createResource() error {
 }
 
 func (m *Menu) disableResource() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	id, err := m.promptInt64("ID ресурса для отключения: ")
 	if err != nil {
@@ -341,6 +350,7 @@ func (m *Menu) disableResource() error {
 }
 
 func (m *Menu) listBookings() {
+	m.clearScreen()
 	bookings := m.services.Booking.ListAll()
 	fmt.Fprintln(m.out)
 	if len(bookings) == 0 {
@@ -364,6 +374,7 @@ func (m *Menu) listBookings() {
 }
 
 func (m *Menu) createBooking() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	userID, err := m.promptInt64("ID пользователя: ")
 	if err != nil {
@@ -396,6 +407,7 @@ func (m *Menu) createBooking() error {
 }
 
 func (m *Menu) cancelBooking() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	bookingID, err := m.promptInt64("ID бронирования: ")
 	if err != nil {
@@ -417,6 +429,7 @@ func (m *Menu) cancelBooking() error {
 }
 
 func (m *Menu) showUtilizationReport() error {
+	m.clearScreen()
 	fmt.Fprintln(m.out)
 	start, err := m.promptTime("Период с (YYYY-MM-DD HH:MM): ")
 	if err != nil {
@@ -461,24 +474,34 @@ func (m *Menu) showUtilizationReport() error {
 }
 
 func (m *Menu) showLogs() error {
-	fmt.Fprintln(m.out)
-	fmt.Fprintln(m.out, "=== Логи ===")
-	lines := m.logs.Logs()
-	if len(lines) == 0 {
-		fmt.Fprintln(m.out, "Логи пока пусты.")
-	} else {
-		start := 0
-		if len(lines) > 20 {
-			start = len(lines) - 20
+	done := make(chan error, 1)
+
+	go func() {
+		for {
+			line, err := m.readLine()
+			if err != nil {
+				done <- err
+				return
+			}
+			if line == "" {
+				done <- nil
+				return
+			}
 		}
-		for _, line := range lines[start:] {
-			fmt.Fprintln(m.out, line)
+	}()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		m.renderLogsScreen()
+
+		select {
+		case err := <-done:
+			return err
+		case <-ticker.C:
 		}
 	}
-
-	fmt.Fprint(m.out, "Нажмите Enter, чтобы вернуться...")
-	_, err := m.readLine()
-	return err
 }
 
 func (m *Menu) prompt(label string) (string, error) {
@@ -563,6 +586,9 @@ func (m *Menu) promptResourceType() (domain.ResourceType, error) {
 }
 
 func (m *Menu) readLine() (string, error) {
+	m.readMu.Lock()
+	defer m.readMu.Unlock()
+
 	line, err := m.reader.ReadString('\n')
 	if err != nil {
 		if err == io.EOF && strings.TrimSpace(line) == "" {
@@ -574,4 +600,32 @@ func (m *Menu) readLine() (string, error) {
 
 func (m *Menu) printError(message string) {
 	fmt.Fprintf(m.out, "Ошибка: %s\n", message)
+}
+
+func (m *Menu) clearScreen() {
+	fmt.Fprint(m.out, "\033[H\033[2J")
+}
+
+func (m *Menu) renderLogsScreen() {
+	m.clearScreen()
+	fmt.Fprintln(m.out)
+	fmt.Fprintln(m.out, "=== Логи ===")
+	fmt.Fprintln(m.out, "Экран обновляется автоматически. Нажмите Enter, чтобы вернуться.")
+
+	lines := m.logs.Logs()
+	if len(lines) == 0 {
+		fmt.Fprintln(m.out)
+		fmt.Fprintln(m.out, "Логи пока пусты.")
+		return
+	}
+
+	start := 0
+	if len(lines) > 20 {
+		start = len(lines) - 20
+	}
+
+	fmt.Fprintln(m.out)
+	for _, line := range lines[start:] {
+		fmt.Fprintln(m.out, line)
+	}
 }
