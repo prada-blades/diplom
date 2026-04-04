@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"diplom/internal/bootstrap"
 	"diplom/internal/cache"
 	"diplom/internal/config"
 	"diplom/internal/domain"
-	httpapi "diplom/internal/http"
 	"diplom/internal/repository"
 	"diplom/internal/service"
 )
 
-func TestMenuHandlesInvalidChoiceAndExit(t *testing.T) {
-	menu, _, output := newTestMenu("9\n0\n")
+func TestMenuHandlesInvalidChoiceAndEOF(t *testing.T) {
+	menu, _, output := newTestMenu("9\n")
 
 	if err := menu.Run(); err != nil {
 		t.Fatalf("run menu: %v", err)
@@ -28,7 +28,7 @@ func TestMenuHandlesInvalidChoiceAndExit(t *testing.T) {
 
 func TestMenuCreatesResource(t *testing.T) {
 	menu, store, output := newTestMenu(
-		"2\n3\nRoom A\n1\nHQ\n10\nBoard room\n2\n0\n0\n",
+		"2\n3\nRoom A\n1\nHQ\n10\nBoard room\n0\n",
 	)
 
 	if err := menu.Run(); err != nil {
@@ -47,9 +47,9 @@ func TestMenuCreatesResource(t *testing.T) {
 	}
 }
 
-func TestMenuCreatesAndCancelsBookingAndShowsLogs(t *testing.T) {
-	menu, store, output := newTestMenu(
-		"3\n2\n2\n1\n2099-05-01 10:00\n2099-05-01 11:00\nPlanning\n3\n1\n0\n5\n\n0\n",
+func TestMenuCreatesAndCancelsBooking(t *testing.T) {
+	menu, store, _ := newTestMenu(
+		"3\n2\n2\n1\n2099-05-01 10:00\n2099-05-01 11:00\nPlanning\n3\n1\n0\n",
 	)
 
 	admin, err := menu.services.Auth.GetUserByEmail(menu.defaultAdmin.Email)
@@ -63,8 +63,6 @@ func TestMenuCreatesAndCancelsBookingAndShowsLogs(t *testing.T) {
 	if _, err := menu.services.Resource.Create("Desk 7", domain.ResourceWorkspace, "Floor 2", 0, "Quiet zone"); err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
-
-	menu.logs.(*stubLogs).lines = append(menu.logs.(*stubLogs).lines, "server started")
 
 	if err := menu.Run(); err != nil {
 		t.Fatalf("run menu: %v", err)
@@ -83,17 +81,6 @@ func TestMenuCreatesAndCancelsBookingAndShowsLogs(t *testing.T) {
 	if admin.Role != domain.RoleAdmin {
 		t.Fatalf("unexpected admin role: %s", admin.Role)
 	}
-	if !strings.Contains(output.String(), "server started") {
-		t.Fatalf("expected log output, got %q", output.String())
-	}
-}
-
-type stubLogs struct {
-	lines []string
-}
-
-func (s *stubLogs) Logs() []string {
-	return append([]string(nil), s.lines...)
 }
 
 func newTestMenu(input string) (*Menu, *repository.MemoryStore, *bytes.Buffer) {
@@ -106,15 +93,12 @@ func newTestMenu(input string) (*Menu, *repository.MemoryStore, *bytes.Buffer) {
 	}
 
 	output := &bytes.Buffer{}
-	logs := &stubLogs{}
 	menu := NewMenu(
-		httpapi.AppServices{
+		bootstrap.Services{
 			Auth:     authService,
 			Resource: resourceService,
 			Booking:  bookingService,
 		},
-		logs,
-		":8080",
 		config.DefaultAdmin{
 			FullName: "Admin",
 			Email:    "admin@corp.local",

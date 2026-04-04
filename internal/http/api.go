@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	nethttp "net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"diplom/internal/cache"
-	"diplom/internal/config"
+	"diplom/internal/bootstrap"
 	"diplom/internal/domain"
-	"diplom/internal/repository/postgres"
 	"diplom/internal/service"
 )
 
@@ -22,69 +19,25 @@ type contextKey string
 const userContextKey contextKey = "user"
 
 type App struct {
-	cfg             config.Config
-	logger          *slog.Logger
-	logs            *LogBuffer
-	authService     *service.AuthService
-	resourceService *service.ResourceService
-	bookingService  *service.BookingService
-	server          *nethttp.Server
-	store           *postgres.Store
+	boot   *bootstrap.Bootstrap
+	server *nethttp.Server
 }
 
-func NewApp() (*App, error) {
-	cfg := config.Load()
-	logs := NewLogBuffer(300)
-	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	store, err := postgres.NewStore(cfg.DatabaseURL)
-	if err != nil {
-		return nil, err
-	}
-	if err := store.Migrate(); err != nil {
-		_ = store.Close()
-		return nil, err
-	}
-	appCache := cache.Cache(cache.NewNoop())
-	if cfg.Redis.Enabled {
-		redisCache, err := cache.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
-		if err != nil {
-			logger.Warn("redis unavailable, continuing without cache", "addr", cfg.Redis.Addr, "error", err)
-		} else {
-			appCache = redisCache
-		}
-	}
-
-	authService := service.NewAuthService(store, cfg.JWTSecret)
-	resourceService := service.NewResourceService(store, appCache)
-	bookingService := service.NewBookingService(store, store, appCache)
-
-	if err := authService.SeedAdmin(cfg.DefaultAdmin.FullName, cfg.DefaultAdmin.Email, cfg.DefaultAdmin.Password); err != nil {
-		_ = store.Close()
-		return nil, err
-	}
-
-	app := &App{
-		cfg:             cfg,
-		logger:          logger,
-		logs:            logs,
-		authService:     authService,
-		resourceService: resourceService,
-		bookingService:  bookingService,
-		store:           store,
-	}
+func NewApp(boot *bootstrap.Bootstrap) *App {
+	app := &App{boot: boot}
 
 	mux := nethttp.NewServeMux()
 	app.registerRoutes(mux)
 	app.server = &nethttp.Server{
-		Addr:    cfg.Address,
+		Addr:    boot.Config.Address,
 		Handler: app.loggingMiddleware(mux),
 	}
 
-	return app, nil
+	return app
 }
 
 func (a *App) Run() error {
-	a.logger.Info("server starting", "address", a.cfg.Address, "default_admin_email", a.cfg.DefaultAdmin.Email)
+	a.boot.Logger.Info("server starting", "address", a.boot.Config.Address, "default_admin_email", a.boot.Config.DefaultAdmin.Email)
 	err := a.server.ListenAndServe()
 	if err != nil && !errors.Is(err, nethttp.ErrServerClosed) {
 		return err
@@ -141,7 +94,7 @@ func (a *App) handleRegister(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	user, token, err := a.authService.Register(req.FullName, req.Email, req.Password, domain.RoleEmployee)
+	user, token, err := a.boot.Services.Auth.Register(req.FullName, req.Email, req.Password, domain.RoleEmployee)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "register_failed", err.Error())
 		return
@@ -170,7 +123,7 @@ func (a *App) handleLogin(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	user, token, err := a.authService.Login(req.Email, req.Password)
+	user, token, err := a.boot.Services.Auth.Login(req.Email, req.Password)
 	if err != nil {
 		writeError(w, nethttp.StatusUnauthorized, "login_failed", err.Error())
 		return
@@ -206,7 +159,7 @@ func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 		resourceType := domain.ResourceType(r.URL.Query().Get("type"))
 		onlyActive := r.URL.Query().Get("include_inactive") != "true"
 		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"items": a.resourceService.List(resourceType, onlyActive),
+			"items": a.boot.Services.Resource.List(resourceType, onlyActive),
 		})
 	case nethttp.MethodPost:
 		user, ok := a.authenticatedUserFromRequest(w, r)
@@ -224,7 +177,7 @@ func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 			return
 		}
 
-		resource, err := a.resourceService.Create(req.Name, req.Type, req.Location, req.Capacity, req.Description)
+		resource, err := a.boot.Services.Resource.Create(req.Name, req.Type, req.Location, req.Capacity, req.Description)
 		if err != nil {
 			writeError(w, nethttp.StatusBadRequest, "resource_create_failed", err.Error())
 			return
@@ -245,7 +198,7 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	switch r.Method {
 	case nethttp.MethodGet:
-		resource, err := a.resourceService.Get(id)
+		resource, err := a.boot.Services.Resource.Get(id)
 		if err != nil {
 			writeError(w, nethttp.StatusNotFound, "not_found", "resource not found")
 			return
@@ -272,7 +225,7 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 			isActive = *req.IsActive
 		}
 
-		resource, err := a.resourceService.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, isActive)
+		resource, err := a.boot.Services.Resource.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, isActive)
 		if err != nil {
 			writeError(w, nethttp.StatusBadRequest, "resource_update_failed", err.Error())
 			return
@@ -289,7 +242,7 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 			return
 		}
 
-		resource, err := a.resourceService.Disable(id)
+		resource, err := a.boot.Services.Resource.Disable(id)
 		if err != nil {
 			writeError(w, nethttp.StatusNotFound, "not_found", "resource not found")
 			return
@@ -314,7 +267,7 @@ func (a *App) handleAvailability(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	resourceType := domain.ResourceType(r.URL.Query().Get("type"))
-	items, err := a.bookingService.Availability(start, end, resourceType)
+	items, err := a.boot.Services.Booking.Availability(start, end, resourceType)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "availability_failed", err.Error())
 		return
@@ -331,7 +284,7 @@ func (a *App) handleMyBookings(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	user := currentUser(r)
 	writeJSON(w, nethttp.StatusOK, map[string]any{
-		"items": a.bookingService.ListMy(user.ID),
+		"items": a.boot.Services.Booking.ListMy(user.ID),
 	})
 }
 
@@ -372,7 +325,7 @@ func (a *App) handleScheduleRecommendations(w nethttp.ResponseWriter, r *nethttp
 		return
 	}
 
-	items, err := a.bookingService.RecommendSchedule(service.ScheduleRecommendationRequest{
+	items, err := a.boot.Services.Booking.RecommendSchedule(service.ScheduleRecommendationRequest{
 		ResourceType:      req.ResourceType,
 		Participants:      req.Participants,
 		DurationMinutes:   req.DurationMinutes,
@@ -419,7 +372,7 @@ func (a *App) handleCreateBooking(w nethttp.ResponseWriter, r *nethttp.Request) 
 	}
 
 	user := currentUser(r)
-	booking, err := a.bookingService.Create(user.ID, req.ResourceID, start, end, req.Purpose)
+	booking, err := a.boot.Services.Booking.Create(user.ID, req.ResourceID, start, end, req.Purpose)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "booking_create_failed", err.Error())
 		return
@@ -440,7 +393,7 @@ func (a *App) handleBookingByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	booking, err := a.bookingService.Cancel(currentUser(r), id)
+	booking, err := a.boot.Services.Booking.Cancel(currentUser(r), id)
 	if err != nil {
 		status := nethttp.StatusBadRequest
 		if err.Error() == "forbidden" {
@@ -463,7 +416,7 @@ func (a *App) handleAdminBookings(w nethttp.ResponseWriter, r *nethttp.Request) 
 	}
 
 	writeJSON(w, nethttp.StatusOK, map[string]any{
-		"items": a.bookingService.ListAll(),
+		"items": a.boot.Services.Booking.ListAll(),
 	})
 }
 
@@ -479,7 +432,7 @@ func (a *App) handleUtilizationReport(w nethttp.ResponseWriter, r *nethttp.Reque
 		return
 	}
 
-	report, err := a.bookingService.UtilizationReport(start, end)
+	report, err := a.boot.Services.Booking.UtilizationReport(start, end)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "report_failed", err.Error())
 		return
@@ -492,7 +445,7 @@ func (a *App) loggingMiddleware(next nethttp.Handler) nethttp.Handler {
 	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		a.logger.Info("request handled", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
+		a.boot.Logger.Info("request handled", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
 }
 
@@ -527,7 +480,7 @@ func (a *App) authenticatedUserFromRequest(w nethttp.ResponseWriter, r *nethttp.
 	}
 
 	token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
-	user, err := a.authService.Authenticate(token)
+	user, err := a.boot.Services.Auth.Authenticate(token)
 	if err != nil {
 		writeError(w, nethttp.StatusUnauthorized, "unauthorized", "invalid or expired token")
 		return domain.User{}, false
