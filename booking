@@ -1,0 +1,40 @@
+#!/usr/bin/env sh
+
+set -eu
+
+usage() {
+  cat <<'EOF'
+Usage: ./booking <command>
+
+Commands:
+  up       Build and start app, postgres, and redis in the background
+  restart  Rebuild and restart the app stack
+  down     Stop and remove the app stack
+  logs     Follow app logs in real time
+EOF
+}
+
+if [ $# -ne 1 ]; then
+  usage
+  exit 1
+fi
+
+case "$1" in
+  up)
+    exec docker compose up -d --build
+    ;;
+  restart)
+    docker compose down
+    exec docker compose up -d --build
+    ;;
+  down)
+    exec docker compose down
+    ;;
+  logs)
+    exec docker compose logs -f app
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

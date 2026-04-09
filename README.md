@@ -27,6 +27,12 @@
 docker compose up -d
 ```
 
+Или короткой командой из корня проекта:
+
+```bash
+./booking up
+```
+
 2. Проверьте состояние контейнеров:
 
 ```bash
@@ -41,10 +47,27 @@ docker compose ps
 docker compose logs -f app
 ```
 
+Или:
+
+```bash
+./booking logs
+```
+
 Для локального запуска без Docker всё ещё можно использовать:
 
 ```bash
 go run .
+```
+
+## Команда booking
+
+В корне проекта есть короткая обёртка для Docker-команд:
+
+```bash
+./booking up
+./booking restart
+./booking down
+./booking logs
 ```
 
 Переменные окружения по умолчанию:
