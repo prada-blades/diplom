@@ -132,14 +132,6 @@ func (s *AuthService) Authenticate(token string) (domain.User, error) {
 	return user, nil
 }
 
-func (s *AuthService) GetUserByEmail(email string) (domain.User, error) {
-	return s.users.GetUserByEmail(email)
-}
-
-func (s *AuthService) ListUsers() []domain.User {
-	return s.users.ListUsers()
-}
-
 type tokenClaims struct {
 	UserID int64       `json:"user_id"`
 	Role   domain.Role `json:"role"`

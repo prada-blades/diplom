@@ -24,18 +24,15 @@ const userContextKey contextKey = "user"
 type App struct {
 	cfg             config.Config
 	logger          *slog.Logger
-	logs            *LogBuffer
 	authService     *service.AuthService
 	resourceService *service.ResourceService
 	bookingService  *service.BookingService
 	server          *nethttp.Server
-	store           *postgres.Store
 }
 
 func NewApp() (*App, error) {
 	cfg := config.Load()
-	logs := NewLogBuffer(300)
-	logger := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.Default()
 	store, err := postgres.NewStore(cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
@@ -66,11 +63,9 @@ func NewApp() (*App, error) {
 	app := &App{
 		cfg:             cfg,
 		logger:          logger,
-		logs:            logs,
 		authService:     authService,
 		resourceService: resourceService,
 		bookingService:  bookingService,
-		store:           store,
 	}
 
 	mux := nethttp.NewServeMux()
@@ -85,11 +80,7 @@ func NewApp() (*App, error) {
 
 func (a *App) Run() error {
 	a.logger.Info("server starting", "address", a.cfg.Address, "default_admin_email", a.cfg.DefaultAdmin.Email)
-	err := a.server.ListenAndServe()
-	if err != nil && !errors.Is(err, nethttp.ErrServerClosed) {
-		return err
-	}
-	return nil
+	return a.server.ListenAndServe()
 }
 
 func (a *App) registerRoutes(mux *nethttp.ServeMux) {
