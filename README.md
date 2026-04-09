@@ -33,42 +33,14 @@ docker compose up -d postgres redis app
 docker compose logs -f app
 ```
 
-3. Когда нужна админка, запускайте её отдельной Docker-командой:
+3. Когда нужна админка, запускайте её отдельно на хосте:
 
 ```bash
-docker compose run --rm app admin
+go run . admin
 ```
 
 Сервер слушает `:8080` и живёт в отдельном контейнере, поэтому не зависит от открытого терминала.
 Выход из админки не влияет на контейнер `app`.
-
-## Команда booking
-
-Для коротких команд есть обёртка `booking` в корне проекта.
-
-Из корня проекта:
-
-```bash
-./booking up
-./booking admin
-./booking logs
-./booking ps
-```
-
-Чтобы запускать `booking` из любой директории:
-
-```bash
-make install-booking
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-После этого можно использовать:
-
-```bash
-booking up
-booking admin
-booking logs
-```
 
 Переменные окружения по умолчанию:
 
@@ -112,11 +84,6 @@ booking logs
 
 - `go run .` или `go run . server` запускает только HTTP API;
 - `go run . admin` запускает только консольную админку.
-
-В Docker-сценарии обычно напрямую используется не `go run`, а:
-
-- `docker compose up -d postgres redis app` для сервера;
-- `docker compose run --rm app admin` для админки.
 
 ## Тесты
 

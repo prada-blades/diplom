@@ -16,5 +16,4 @@ COPY --from=build /out/diplom ./diplom
 
 EXPOSE 8080
 
-ENTRYPOINT ["./diplom"]
-CMD ["server"]
+CMD ["./diplom", "server"]
