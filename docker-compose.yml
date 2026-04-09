@@ -1,6 +1,32 @@
-version: "3.9"
-
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: diplom-app
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      APP_ADDRESS: ":8080"
+      APP_DATABASE_URL: "postgres://postgres:postgres@postgres:5432/diplom?sslmode=disable"
+      APP_JWT_SECRET: "development-secret"
+      APP_REDIS_ENABLED: "true"
+      APP_REDIS_ADDR: "redis:6379"
+      APP_REDIS_PASSWORD: ""
+      APP_REDIS_DB: "0"
+      APP_ADMIN_NAME: "System Administrator"
+      APP_ADMIN_EMAIL: "admin@corp.local"
+      APP_ADMIN_PASSWORD: "admin123"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   postgres:
     image: postgres:16-alpine
     container_name: diplom-postgres

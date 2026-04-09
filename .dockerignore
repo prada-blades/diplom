@@ -1,0 +1,6 @@
+.git
+.gitignore
+postgres_data
+redis_data
+tmp
+*.log
