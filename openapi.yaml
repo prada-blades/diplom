@@ -1,0 +1,886 @@
+openapi: 3.0.3
+info:
+  title: Corporate Resource Booking API
+  version: 1.0.0
+  description: API for booking shared corporate resources such as meeting rooms and workspaces.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Health
+  - name: Auth
+  - name: Resources
+  - name: Bookings
+  - name: Recommendations
+  - name: Admin
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorBody:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+    Error:
+      type: object
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorBody"
+      required:
+        - error
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        time:
+          type: string
+          format: date-time
+      required:
+        - status
+        - time
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - employee
+            - admin
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - full_name
+        - email
+        - role
+        - created_at
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required:
+        - user
+        - token
+    Resource:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - meeting_room
+            - workspace
+        location:
+          type: string
+        capacity:
+          type: integer
+        description:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - type
+        - location
+        - capacity
+        - description
+        - is_active
+        - created_at
+        - updated_at
+    ResourceListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Resource"
+      required:
+        - items
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        resource_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - active
+            - cancelled
+        purpose:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - resource_id
+        - user_id
+        - start_time
+        - end_time
+        - status
+        - purpose
+        - created_at
+    BookingListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+      required:
+        - items
+    UtilizationReportItem:
+      type: object
+      properties:
+        resource_id:
+          type: integer
+          format: int64
+        resource_name:
+          type: string
+        resource_type:
+          type: string
+        booked_minutes:
+          type: integer
+          format: int64
+        utilization_percent:
+          type: number
+          format: double
+      required:
+        - resource_id
+        - resource_name
+        - resource_type
+        - booked_minutes
+        - utilization_percent
+    RegisterRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - full_name
+        - email
+        - password
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+    ResourceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - meeting_room
+            - workspace
+        location:
+          type: string
+        capacity:
+          type: integer
+        description:
+          type: string
+        is_active:
+          type: boolean
+      required:
+        - name
+        - type
+        - location
+        - capacity
+        - description
+    BookingRequest:
+      type: object
+      properties:
+        resource_id:
+          type: integer
+          format: int64
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+      required:
+        - resource_id
+        - start_time
+        - end_time
+        - purpose
+    ScheduleRecommendationRequest:
+      type: object
+      properties:
+        resource_type:
+          type: string
+          enum:
+            - meeting_room
+        participants:
+          type: integer
+          minimum: 1
+        duration_minutes:
+          type: integer
+          minimum: 15
+          multipleOf: 15
+        preferred_start:
+          type: string
+          format: date-time
+        search_window_start:
+          type: string
+          format: date-time
+        search_window_end:
+          type: string
+          format: date-time
+      required:
+        - resource_type
+        - participants
+        - duration_minutes
+        - preferred_start
+        - search_window_start
+        - search_window_end
+    ScheduleRecommendationCandidate:
+      type: object
+      properties:
+        resource_id:
+          type: integer
+          format: int64
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        score:
+          type: number
+          format: double
+        explanation:
+          type: string
+      required:
+        - resource_id
+        - start_time
+        - end_time
+        - score
+        - explanation
+    ScheduleRecommendationResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleRecommendationCandidate"
+      required:
+        - items
+    HourLoadStat:
+      type: object
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        booked_minutes:
+          type: integer
+          format: int64
+        share_percent:
+          type: number
+          format: double
+      required:
+        - hour
+        - booked_minutes
+        - share_percent
+    WeekdayLoadStat:
+      type: object
+      properties:
+        weekday:
+          type: string
+        booked_minutes:
+          type: integer
+          format: int64
+        share_percent:
+          type: number
+          format: double
+      required:
+        - weekday
+        - booked_minutes
+        - share_percent
+    UtilizationReportStats:
+      type: object
+      properties:
+        resource_loads:
+          type: array
+          items:
+            $ref: "#/components/schemas/UtilizationReportItem"
+        hour_loads:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourLoadStat"
+        weekday_loads:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeekdayLoadStat"
+      required:
+        - resource_loads
+        - hour_loads
+        - weekday_loads
+    UtilizationReportResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UtilizationReportItem"
+        stats:
+          $ref: "#/components/schemas/UtilizationReportStats"
+      required:
+        - items
+        - stats
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, invalid, or expired bearer token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Authenticated user does not have enough permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Requested entity was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MethodNotAllowed:
+      description: Method not allowed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Check service availability
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register a new employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /resources:
+    get:
+      tags:
+        - Resources
+      summary: List resources
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum:
+              - meeting_room
+              - workspace
+        - in: query
+          name: include_inactive
+          schema:
+            type: boolean
+          description: Set to `true` to include inactive resources. Any other value is treated as `false`.
+      responses:
+        "200":
+          description: Resource list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceListResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+    post:
+      tags:
+        - Resources
+      summary: Create a resource
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceRequest"
+      responses:
+        "201":
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /resources/{id}:
+    get:
+      tags:
+        - Resources
+      summary: Get resource by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Resource details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+        "400":
+          description: Invalid resource ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+    put:
+      tags:
+        - Resources
+      summary: Update a resource
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourceRequest"
+      responses:
+        "200":
+          description: Resource updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+        "400":
+          description: Invalid JSON, invalid resource ID, or resource update failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+    delete:
+      tags:
+        - Resources
+      summary: Disable a resource
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Resource disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+        "400":
+          description: Invalid resource ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /availability:
+    get:
+      tags:
+        - Bookings
+      summary: List available resources for a time window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum:
+              - meeting_room
+              - workspace
+      responses:
+        "200":
+          description: List of available resources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceListResponse"
+        "400":
+          description: Invalid interval or availability request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /recommendations/schedule:
+    post:
+      tags:
+        - Recommendations
+      summary: Recommend the best meeting room slots inside a search window
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleRecommendationRequest"
+      responses:
+        "200":
+          description: Ranked recommendation candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleRecommendationResponse"
+        "400":
+          description: Invalid JSON, malformed timestamps, or recommendation request failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /bookings:
+    post:
+      tags:
+        - Bookings
+      summary: Create a booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid JSON, malformed timestamps, or booking creation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /bookings/my:
+    get:
+      tags:
+        - Bookings
+      summary: List current user bookings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User bookings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /bookings/{id}:
+    delete:
+      tags:
+        - Bookings
+      summary: Cancel a booking
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid booking ID or booking cancellation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: User cannot cancel someone else's booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /admin/bookings:
+    get:
+      tags:
+        - Admin
+      summary: List all bookings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: All bookings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /admin/reports/utilization:
+    get:
+      tags:
+        - Admin
+      summary: Get resource utilization report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: end
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Utilization report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UtilizationReportResponse"
+        "400":
+          description: Invalid interval or report generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
