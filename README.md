@@ -21,7 +21,15 @@
 
 ## Быстрый запуск
 
-1. Поднимите PostgreSQL, Redis и приложение:
+1. Подготовьте `.env` на основе шаблона:
+
+```bash
+cp .env.example .env
+```
+
+Перед публикацией обязательно замените значения `POSTGRES_PASSWORD`, `APP_JWT_SECRET` и `APP_ADMIN_PASSWORD` на свои.
+
+2. Поднимите внутренний стек PostgreSQL, Redis и приложения:
 
 ```bash
 docker compose up -d
@@ -39,7 +47,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Сервер слушает `:8080`.
+Приложение слушает `:8080` только внутри docker-сети. Для публикации в интернет используйте отдельный `nginx`, который проксирует запросы на `app:8080`.
 
 Для просмотра логов приложения:
 
@@ -73,17 +81,18 @@ go run .
 Переменные окружения по умолчанию:
 
 - `APP_ADDRESS=:8080`
-- `APP_DATABASE_URL=postgres://postgres:postgres@localhost:5432/diplom?sslmode=disable`
-- `APP_JWT_SECRET=development-secret`
-- `APP_REDIS_ENABLED=false`
-- `APP_REDIS_ADDR=localhost:6379`
+- `APP_DATABASE_URL=postgres://postgres:<password>@postgres:5432/diplom?sslmode=disable`
+- `APP_REDIS_ENABLED=true`
+- `APP_REDIS_ADDR=redis:6379`
 - `APP_REDIS_PASSWORD=`
 - `APP_REDIS_DB=0`
 
-Предсозданный администратор по умолчанию:
+В прод-конфигурации внешние порты `8080`, `5432` и `6379` не публикуются. Сервисы доступны только внутри docker-сети.
+
+Предсозданный администратор задаётся через `.env`:
 
 - email: `admin@corp.local`
-- password: `admin123`
+- password: значение `APP_ADMIN_PASSWORD`
 
 Один и тот же веб-клиент может работать с обеими ролями.
 Сервер сам определяет права по JWT и возвращает `403 forbidden` для административных операций, недоступных пользователю.

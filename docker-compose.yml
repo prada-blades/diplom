@@ -8,18 +8,18 @@ services:
       - postgres
       - redis
     environment:
-      APP_ADDRESS: ":8080"
-      APP_DATABASE_URL: "postgres://postgres:postgres@postgres:5432/diplom?sslmode=disable"
-      APP_JWT_SECRET: "development-secret"
-      APP_REDIS_ENABLED: "true"
-      APP_REDIS_ADDR: "redis:6379"
-      APP_REDIS_PASSWORD: ""
-      APP_REDIS_DB: "0"
-      APP_ADMIN_NAME: "System Administrator"
-      APP_ADMIN_EMAIL: "admin@corp.local"
-      APP_ADMIN_PASSWORD: "admin123"
-    ports:
-      - "8080:8080"
+      APP_ADDRESS: "${APP_ADDRESS:-:8080}"
+      APP_DATABASE_URL: "${APP_DATABASE_URL}"
+      APP_JWT_SECRET: "${APP_JWT_SECRET}"
+      APP_REDIS_ENABLED: "${APP_REDIS_ENABLED:-true}"
+      APP_REDIS_ADDR: "${APP_REDIS_ADDR:-redis:6379}"
+      APP_REDIS_PASSWORD: "${APP_REDIS_PASSWORD:-}"
+      APP_REDIS_DB: "${APP_REDIS_DB:-0}"
+      APP_ADMIN_NAME: "${APP_ADMIN_NAME:-System Administrator}"
+      APP_ADMIN_EMAIL: "${APP_ADMIN_EMAIL:-admin@corp.local}"
+      APP_ADMIN_PASSWORD: "${APP_ADMIN_PASSWORD}"
+    expose:
+      - "8080"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
@@ -31,20 +31,18 @@ services:
     image: postgres:16-alpine
     container_name: diplom-postgres
     environment:
-      POSTGRES_DB: diplom
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: "${POSTGRES_DB:-diplom}"
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
   redis:
     image: redis:7-alpine
     container_name: diplom-redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: unless-stopped
 
 volumes:
   postgres_data:
