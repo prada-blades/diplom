@@ -72,11 +72,20 @@ go run .
 В корне проекта есть короткая обёртка для Docker-команд:
 
 ```bash
+./booking init-env
 ./booking up
 ./booking restart
 ./booking down
 ./booking logs
 ```
+
+Команда `./booking init-env` создаёт `.env` из шаблона, если файла ещё нет, и генерирует новые значения для:
+
+- `POSTGRES_PASSWORD`
+- `APP_JWT_SECRET`
+- `APP_ADMIN_PASSWORD`
+
+После этого она автоматически обновляет `APP_DATABASE_URL` под новый пароль PostgreSQL.
 
 Переменные окружения по умолчанию:
 
