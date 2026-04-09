@@ -89,8 +89,8 @@ func (a *App) registerRoutes(mux *nethttp.ServeMux) {
 	mux.HandleFunc("/auth/login", a.handleLogin)
 	mux.Handle("/me", a.requireAuth(nethttp.HandlerFunc(a.handleMe)))
 
-	mux.HandleFunc("/resources", a.handleResources)
-	mux.HandleFunc("/resources/", a.handleResourceByID)
+	mux.Handle("/resources", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResources), nethttp.MethodPost))
+	mux.Handle("/resources/", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResourceByID), nethttp.MethodPut, nethttp.MethodDelete))
 
 	mux.Handle("/availability", a.requireAuth(nethttp.HandlerFunc(a.handleAvailability)))
 	mux.Handle("/recommendations/schedule", a.requireAuth(nethttp.HandlerFunc(a.handleScheduleRecommendations)))
@@ -200,15 +200,6 @@ func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 			"items": a.resourceService.List(resourceType, onlyActive),
 		})
 	case nethttp.MethodPost:
-		user, ok := a.authenticatedUserFromRequest(w, r)
-		if !ok {
-			return
-		}
-		if user.Role != domain.RoleAdmin {
-			writeError(w, nethttp.StatusForbidden, "forbidden", "admin access required")
-			return
-		}
-
 		var req resourceRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, nethttp.StatusBadRequest, "invalid_json", err.Error())
@@ -243,15 +234,6 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 		writeJSON(w, nethttp.StatusOK, resource)
 	case nethttp.MethodPut:
-		user, ok := a.authenticatedUserFromRequest(w, r)
-		if !ok {
-			return
-		}
-		if user.Role != domain.RoleAdmin {
-			writeError(w, nethttp.StatusForbidden, "forbidden", "admin access required")
-			return
-		}
-
 		var req resourceRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, nethttp.StatusBadRequest, "invalid_json", err.Error())
@@ -271,15 +253,6 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 		writeJSON(w, nethttp.StatusOK, resource)
 	case nethttp.MethodDelete:
-		user, ok := a.authenticatedUserFromRequest(w, r)
-		if !ok {
-			return
-		}
-		if user.Role != domain.RoleAdmin {
-			writeError(w, nethttp.StatusForbidden, "forbidden", "admin access required")
-			return
-		}
-
 		resource, err := a.resourceService.Disable(id)
 		if err != nil {
 			writeError(w, nethttp.StatusNotFound, "not_found", "resource not found")
@@ -508,6 +481,23 @@ func (a *App) requireAdmin(next nethttp.Handler) nethttp.Handler {
 		}
 		next.ServeHTTP(w, r)
 	}))
+}
+
+func (a *App) requireAdminForMethods(next nethttp.Handler, methods ...string) nethttp.Handler {
+	protectedMethods := make(map[string]struct{}, len(methods))
+	for _, method := range methods {
+		protectedMethods[method] = struct{}{}
+	}
+
+	adminOnly := a.requireAdmin(next)
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		if _, ok := protectedMethods[r.Method]; ok {
+			adminOnly.ServeHTTP(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) authenticatedUserFromRequest(w nethttp.ResponseWriter, r *nethttp.Request) (domain.User, bool) {
