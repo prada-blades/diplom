@@ -10,22 +10,28 @@ import (
 	"sync"
 	"time"
 
-	"diplom/internal/bootstrap"
 	"diplom/internal/config"
 	"diplom/internal/domain"
+	httpapi "diplom/internal/http"
 )
 
 const menuTimeLayout = "2006-01-02 15:04"
 
+type LogSource interface {
+	Logs() []string
+}
+
 type Menu struct {
 	reader       *bufio.Reader
 	out          io.Writer
-	services     bootstrap.Services
+	services     httpapi.AppServices
+	logs         LogSource
+	address      string
 	defaultAdmin config.DefaultAdmin
 	readMu       sync.Mutex
 }
 
-func NewMenu(services bootstrap.Services, defaultAdmin config.DefaultAdmin, in io.Reader, out io.Writer) *Menu {
+func NewMenu(services httpapi.AppServices, logs LogSource, address string, defaultAdmin config.DefaultAdmin, in io.Reader, out io.Writer) *Menu {
 	if in == nil {
 		in = os.Stdin
 	}
@@ -37,6 +43,8 @@ func NewMenu(services bootstrap.Services, defaultAdmin config.DefaultAdmin, in i
 		reader:       bufio.NewReader(in),
 		out:          out,
 		services:     services,
+		logs:         logs,
+		address:      address,
 		defaultAdmin: defaultAdmin,
 	}
 }
@@ -71,6 +79,10 @@ func (m *Menu) Run() error {
 			if err := m.runReportsMenu(); err != nil {
 				return err
 			}
+		case "5":
+			if err := m.showLogs(); err != nil {
+				return err
+			}
 		default:
 			m.printError("Неверный выбор. Введите цифру из меню.")
 		}
@@ -80,13 +92,14 @@ func (m *Menu) Run() error {
 func (m *Menu) printMainMenu() {
 	fmt.Fprintln(m.out)
 	fmt.Fprintln(m.out, "=== Администратор CLI ===")
-	fmt.Fprintln(m.out, "Локальный режим: админка подключается напрямую к БД и сервисам.")
+	fmt.Fprintf(m.out, "HTTP API: %s\n", m.address)
 	fmt.Fprintf(m.out, "Администратор по умолчанию: %s\n", m.defaultAdmin.Email)
 	fmt.Fprintln(m.out, "1. Пользователи")
 	fmt.Fprintln(m.out, "2. Ресурсы")
 	fmt.Fprintln(m.out, "3. Бронирования")
 	fmt.Fprintln(m.out, "4. Отчёты")
-	fmt.Fprintln(m.out, "Ctrl+C. Завершить админку")
+	fmt.Fprintln(m.out, "5. Логи")
+	fmt.Fprintln(m.out, "Ctrl+C. Остановить сервер и CLI")
 	fmt.Fprint(m.out, "Выбор: ")
 }
 
@@ -460,6 +473,37 @@ func (m *Menu) showUtilizationReport() error {
 	return nil
 }
 
+func (m *Menu) showLogs() error {
+	done := make(chan error, 1)
+
+	go func() {
+		for {
+			line, err := m.readLine()
+			if err != nil {
+				done <- err
+				return
+			}
+			if line == "" {
+				done <- nil
+				return
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		m.renderLogsScreen()
+
+		select {
+		case err := <-done:
+			return err
+		case <-ticker.C:
+		}
+	}
+}
+
 func (m *Menu) prompt(label string) (string, error) {
 	fmt.Fprint(m.out, label)
 	return m.readLine()
@@ -560,4 +604,28 @@ func (m *Menu) printError(message string) {
 
 func (m *Menu) clearScreen() {
 	fmt.Fprint(m.out, "\033[H\033[2J")
+}
+
+func (m *Menu) renderLogsScreen() {
+	m.clearScreen()
+	fmt.Fprintln(m.out)
+	fmt.Fprintln(m.out, "=== Логи ===")
+	fmt.Fprintln(m.out, "Экран обновляется автоматически. Нажмите Enter, чтобы вернуться.")
+
+	lines := m.logs.Logs()
+	if len(lines) == 0 {
+		fmt.Fprintln(m.out)
+		fmt.Fprintln(m.out, "Логи пока пусты.")
+		return
+	}
+
+	start := 0
+	if len(lines) > 20 {
+		start = len(lines) - 20
+	}
+
+	fmt.Fprintln(m.out)
+	for _, line := range lines[start:] {
+		fmt.Fprintln(m.out, line)
+	}
 }
