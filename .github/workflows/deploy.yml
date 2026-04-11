@@ -16,19 +16,26 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: ${{ github.workspace }}
+        working-directory: /root/diplom
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          clean: false
+      - name: Ensure deploy directory exists
+        run: |
+          if [ ! -d /root/diplom ]; then
+            echo "Deploy directory /root/diplom does not exist." >&2
+            exit 1
+          fi
+
+      - name: Update repository
+        run: |
+          git fetch origin master
+          git reset --hard origin/master
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache: true
+          go-version-file: /root/diplom/go.mod
+          cache: false
 
       - name: Run tests
         run: go test ./...
@@ -36,7 +43,7 @@ jobs:
       - name: Ensure environment file exists
         run: |
           if [ ! -f .env ]; then
-            echo ".env file is missing in ${GITHUB_WORKSPACE}. Create it on the runner before deploy." >&2
+            echo ".env file is missing in /root/diplom. Create it on the server before deploy." >&2
             exit 1
           fi
 
