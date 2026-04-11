@@ -1,0 +1,26 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, ARM64]
+
+    steps:
+      - name: Deploy on NanoPi
+        run: |
+          set -e
+          cd /~/diplom-app
+          git fetch origin master
+          git reset --hard origin/master
+          test -f .env
+          docker compose up -d --build --remove-orphans
+          docker compose ps
