@@ -10,45 +10,64 @@ concurrency:
   group: deploy-production
   cancel-in-progress: true
 
+env:
+  DEPLOY_DIR: /deploy/diplom
+
 jobs:
   deploy:
     runs-on: [self-hosted, linux, ARM64]
-    defaults:
-      run:
-        shell: bash
-        working-directory: /root/diplom
 
     steps:
-      - name: Ensure deploy directory exists
+      - name: Resolve deploy directory
+        shell: bash
         run: |
-          if [ ! -d /root/diplom ]; then
-            echo "Deploy directory /root/diplom does not exist." >&2
+          if [ ! -d "$DEPLOY_DIR" ]; then
+            echo "Deploy directory $DEPLOY_DIR does not exist or is not accessible for the runner container." >&2
+            echo "Current user: $(whoami)" >&2
+            echo "HOME: $HOME" >&2
+            echo "Mounted volumes inside container:" >&2
+            ls / >&2
             exit 1
           fi
 
+          echo "Using deploy dir: $DEPLOY_DIR"
+
       - name: Update repository
+        shell: bash
         run: |
+          cd "$DEPLOY_DIR"
           git fetch origin master
           git reset --hard origin/master
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: /root/diplom/go.mod
+          go-version-file: ${{ env.DEPLOY_DIR }}/go.mod
           cache: false
 
       - name: Run tests
-        run: go test ./...
+        shell: bash
+        run: |
+          cd "$DEPLOY_DIR"
+          go test ./...
 
       - name: Ensure environment file exists
+        shell: bash
         run: |
+          cd "$DEPLOY_DIR"
           if [ ! -f .env ]; then
-            echo ".env file is missing in /root/diplom. Create it on the server before deploy." >&2
+            echo ".env file is missing in $DEPLOY_DIR. Create it on the host and mount it into the runner container." >&2
             exit 1
           fi
 
       - name: Deploy containers
-        run: docker compose up -d --build --remove-orphans
+        shell: bash
+        run: |
+          cd "$DEPLOY_DIR"
+          docker compose up -d --build --remove-orphans
 
       - name: Show container status
-        run: docker compose ps
+        shell: bash
+        run: |
+          cd "$DEPLOY_DIR"
+          docker compose ps
