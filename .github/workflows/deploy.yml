@@ -18,7 +18,7 @@ jobs:
       - name: Deploy on NanoPi
         run: |
           set -e
-          cd /~/diplom
+          cd /root/diplom
           git fetch origin master
           git reset --hard origin/master
           test -f .env
