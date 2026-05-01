@@ -40,7 +40,7 @@
 По умолчанию после запуска создаётся администратор:
 
 - `email`: `admin@corp.local`
-- `password`: `admin123`
+- `password`: значение `APP_ADMIN_PASSWORD` из `.env`
 
 ## 1. Health Check
 
@@ -160,6 +160,13 @@
   "location": "Office 3, Floor 2",
   "capacity": 8,
   "description": "Main meeting room",
+  "image_urls": [
+    "https://example.com/rooms/room-a-1.jpg"
+  ],
+  "equipment": [
+    "projector",
+    "whiteboard"
+  ],
   "is_active": true,
   "created_at": "2026-03-01T12:00:00Z",
   "updated_at": "2026-03-01T12:00:00Z"
@@ -179,10 +186,15 @@
 
 - `type` (optional): фильтр по типу ресурса
 - `include_inactive=true` (optional): включить неактивные ресурсы
+- `equipment` (optional, repeatable): фильтр по тегам оборудования; ресурс должен содержать все переданные теги
 
 Пример:
 
 `GET /resources?type=meeting_room`
+
+Пример фильтрации по оборудованию:
+
+`GET /resources?equipment=projector&equipment=whiteboard`
 
 Успешный ответ: `200 OK`
 
@@ -196,6 +208,13 @@
       "location": "Office 3, Floor 2",
       "capacity": 8,
       "description": "Main meeting room",
+      "image_urls": [
+        "https://example.com/rooms/room-a-1.jpg"
+      ],
+      "equipment": [
+        "projector",
+        "whiteboard"
+      ],
       "is_active": true,
       "created_at": "2026-03-01T12:00:00Z",
       "updated_at": "2026-03-01T12:00:00Z"
@@ -233,7 +252,15 @@
   "type": "meeting_room",
   "location": "Office 3, Floor 2",
   "capacity": 8,
-  "description": "Main meeting room"
+  "description": "Main meeting room",
+  "image_urls": [
+    "https://example.com/rooms/room-a-1.jpg",
+    "https://example.com/rooms/room-a-2.jpg"
+  ],
+  "equipment": [
+    "Projector",
+    "whiteboard"
+  ]
 }
 ```
 
@@ -263,6 +290,13 @@
   "location": "Office 3, Floor 2",
   "capacity": 10,
   "description": "Updated description",
+  "image_urls": [
+    "https://example.com/rooms/room-a-updated.jpg"
+  ],
+  "equipment": [
+    "tv",
+    "whiteboard"
+  ],
   "is_active": true
 }
 ```
@@ -290,6 +324,24 @@
 - `401 unauthorized`: нет токена
 - `403 forbidden`: недостаточно прав
 - `404 not_found`: ресурс не найден
+
+### `GET /equipment`
+
+Возвращает отсортированный список доступных тегов оборудования.
+
+Успешный ответ: `200 OK`
+
+```json
+{
+  "items": [
+    "projector",
+    "tv",
+    "whiteboard"
+  ]
+}
+```
+
+Авторизация не требуется.
 
 ## 4. Бронирование
 
@@ -418,10 +470,15 @@
 - `start` (required): начало интервала, `RFC3339`
 - `end` (required): конец интервала, `RFC3339`
 - `type` (optional): `meeting_room` или `workspace`
+- `equipment` (optional, repeatable): фильтр по тегам оборудования; ресурс должен содержать все переданные теги
 
 Пример:
 
 `GET /availability?start=2026-03-02T09:00:00Z&end=2026-03-02T10:00:00Z&type=meeting_room`
+
+Пример с фильтром по оборудованию:
+
+`GET /availability?start=2026-03-02T09:00:00Z&end=2026-03-02T10:00:00Z&equipment=projector&equipment=whiteboard`
 
 Успешный ответ: `200 OK`
 
@@ -435,6 +492,11 @@
       "location": "Office 3, Floor 2",
       "capacity": 6,
       "description": "Small room",
+      "image_urls": [],
+      "equipment": [
+        "projector",
+        "whiteboard"
+      ],
       "is_active": true,
       "created_at": "2026-03-01T12:00:00Z",
       "updated_at": "2026-03-01T12:00:00Z"

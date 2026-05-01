@@ -119,7 +119,7 @@ func (s *MemoryStore) GetResource(id int64) (domain.Resource, error) {
 	return resource, nil
 }
 
-func (s *MemoryStore) ListResources(resourceType domain.ResourceType, onlyActive bool) []domain.Resource {
+func (s *MemoryStore) ListResources(resourceType domain.ResourceType, onlyActive bool, equipment []string) []domain.Resource {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -131,6 +131,9 @@ func (s *MemoryStore) ListResources(resourceType domain.ResourceType, onlyActive
 		if onlyActive && !resource.IsActive {
 			continue
 		}
+		if !resourceHasEquipment(resource, equipment) {
+			continue
+		}
 		resources = append(resources, resource)
 	}
 
@@ -139,6 +142,25 @@ func (s *MemoryStore) ListResources(resourceType domain.ResourceType, onlyActive
 	})
 
 	return resources
+}
+
+func (s *MemoryStore) ListEquipment() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	unique := make(map[string]struct{})
+	for _, resource := range s.resources {
+		for _, item := range resource.Equipment {
+			unique[item] = struct{}{}
+		}
+	}
+
+	items := make([]string, 0, len(unique))
+	for item := range unique {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	return items
 }
 
 func (s *MemoryStore) CreateBooking(booking domain.Booking) (domain.Booking, error) {
@@ -223,7 +245,7 @@ func (s *MemoryStore) ListBookings() []domain.Booking {
 	return bookings
 }
 
-func (s *MemoryStore) ListAvailableResources(start, end time.Time, resourceType domain.ResourceType) []domain.Resource {
+func (s *MemoryStore) ListAvailableResources(start, end time.Time, resourceType domain.ResourceType, equipment []string) []domain.Resource {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -233,6 +255,9 @@ func (s *MemoryStore) ListAvailableResources(start, end time.Time, resourceType 
 			continue
 		}
 		if resourceType != "" && resource.Type != resourceType {
+			continue
+		}
+		if !resourceHasEquipment(resource, equipment) {
 			continue
 		}
 
@@ -257,6 +282,23 @@ func (s *MemoryStore) ListAvailableResources(start, end time.Time, resourceType 
 	})
 
 	return available
+}
+
+func resourceHasEquipment(resource domain.Resource, required []string) bool {
+	if len(required) == 0 {
+		return true
+	}
+
+	owned := make(map[string]struct{}, len(resource.Equipment))
+	for _, item := range resource.Equipment {
+		owned[item] = struct{}{}
+	}
+	for _, item := range required {
+		if _, ok := owned[item]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func overlaps(aStart, aEnd, bStart, bEnd time.Time) bool {

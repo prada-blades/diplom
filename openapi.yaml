@@ -103,6 +103,15 @@ components:
           type: integer
         description:
           type: string
+        image_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        equipment:
+          type: array
+          items:
+            type: string
         is_active:
           type: boolean
         created_at:
@@ -118,6 +127,8 @@ components:
         - location
         - capacity
         - description
+        - image_urls
+        - equipment
         - is_active
         - created_at
         - updated_at
@@ -128,6 +139,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Resource"
+      required:
+        - items
+    EquipmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: string
       required:
         - items
     Booking:
@@ -243,6 +263,15 @@ components:
           type: integer
         description:
           type: string
+        image_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        equipment:
+          type: array
+          items:
+            type: string
         is_active:
           type: boolean
       required:
@@ -527,6 +556,11 @@ paths:
           schema:
             type: boolean
           description: Set to `true` to include inactive resources. Any other value is treated as `false`.
+        - in: query
+          name: equipment
+          schema:
+            type: string
+          description: Repeat the parameter to require all listed equipment tags, for example `?equipment=projector&equipment=whiteboard`.
       responses:
         "200":
           description: Resource list
@@ -561,6 +595,20 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /equipment:
+    get:
+      tags:
+        - Resources
+      summary: List all equipment tags
+      responses:
+        "200":
+          description: Sorted unique equipment tags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipmentListResponse"
         "405":
           $ref: "#/components/responses/MethodNotAllowed"
   /resources/{id}:
@@ -691,6 +739,11 @@ paths:
             enum:
               - meeting_room
               - workspace
+        - in: query
+          name: equipment
+          schema:
+            type: string
+          description: Repeat the parameter to require all listed equipment tags, for example `?equipment=projector&equipment=whiteboard`.
       responses:
         "200":
           description: List of available resources

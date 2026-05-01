@@ -39,6 +39,8 @@ type Resource struct {
 	Location    string       `json:"location"`
 	Capacity    int          `json:"capacity"`
 	Description string       `json:"description"`
+	ImageURLs   []string     `json:"image_urls"`
+	Equipment   []string     `json:"equipment"`
 	IsActive    bool         `json:"is_active"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`

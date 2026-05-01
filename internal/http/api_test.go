@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -198,6 +199,109 @@ func TestAdminEndpointsRequireAdminRole(t *testing.T) {
 	}
 }
 
+func TestResourcesSupportImagesAndEquipment(t *testing.T) {
+	app, auth := newTestApp(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+
+	resp := performRequest(t, app, nethttp.MethodPost, "/resources", map[string]any{
+		"name":        "Room Media",
+		"type":        "meeting_room",
+		"location":    "HQ",
+		"capacity":    10,
+		"description": "Presentation room",
+		"image_urls":  []string{"https://example.com/room-a.jpg", "https://example.com/room-b.jpg"},
+		"equipment":   []string{"Projector", "whiteboard", "projector"},
+	}, adminToken)
+	if resp.Code != nethttp.StatusCreated {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusCreated, resp.Code)
+	}
+
+	var resource domain.Resource
+	decodeResponse(t, resp.Body, &resource)
+	if len(resource.ImageURLs) != 2 {
+		t.Fatalf("expected 2 image urls, got %v", resource.ImageURLs)
+	}
+	if !reflect.DeepEqual(resource.Equipment, []string{"projector", "whiteboard"}) {
+		t.Fatalf("unexpected equipment: %v", resource.Equipment)
+	}
+}
+
+func TestResourcesFilterByEquipment(t *testing.T) {
+	app, auth := newTestApp(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+
+	createResourceWithAttrs(t, app, adminToken, "Room A", []string{"projector"}, nil)
+	createResourceWithAttrs(t, app, adminToken, "Room B", []string{"projector", "whiteboard"}, nil)
+
+	resp := performRequest(t, app, nethttp.MethodGet, "/resources?equipment=projector&equipment=whiteboard", nil, "")
+	if resp.Code != nethttp.StatusOK {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusOK, resp.Code)
+	}
+
+	var payload struct {
+		Items []domain.Resource `json:"items"`
+	}
+	decodeResponse(t, resp.Body, &payload)
+	if len(payload.Items) != 1 || payload.Items[0].Name != "Room B" {
+		t.Fatalf("unexpected filtered resources: %+v", payload.Items)
+	}
+}
+
+func TestAvailabilityFilterByEquipment(t *testing.T) {
+	app, auth := newTestApp(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+	employeeToken := mustLogin(t, auth, "employee@example.com", "password123")
+
+	roomA := createResourceWithAttrs(t, app, adminToken, "Room A", []string{"projector"}, nil)
+	createResourceWithAttrs(t, app, adminToken, "Room B", []string{"projector", "whiteboard"}, nil)
+
+	start := time.Now().UTC().Add(6 * time.Hour).Truncate(time.Second)
+	end := start.Add(time.Hour)
+	bookingResp := performRequest(t, app, nethttp.MethodPost, "/bookings", map[string]any{
+		"resource_id": roomA,
+		"start_time":  start.Format(time.RFC3339),
+		"end_time":    end.Format(time.RFC3339),
+		"purpose":     "busy",
+	}, employeeToken)
+	if bookingResp.Code != nethttp.StatusCreated {
+		t.Fatalf("expected booking status %d, got %d", nethttp.StatusCreated, bookingResp.Code)
+	}
+
+	resp := performRequest(t, app, nethttp.MethodGet, "/availability?start="+start.Format(time.RFC3339)+"&end="+end.Format(time.RFC3339)+"&equipment=projector&equipment=whiteboard", nil, employeeToken)
+	if resp.Code != nethttp.StatusOK {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusOK, resp.Code)
+	}
+
+	var payload struct {
+		Items []domain.Resource `json:"items"`
+	}
+	decodeResponse(t, resp.Body, &payload)
+	if len(payload.Items) != 1 || payload.Items[0].Name != "Room B" {
+		t.Fatalf("unexpected availability resources: %+v", payload.Items)
+	}
+}
+
+func TestEquipmentEndpointReturnsSortedTags(t *testing.T) {
+	app, auth := newTestApp(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+
+	createResourceWithAttrs(t, app, adminToken, "Room A", []string{"Whiteboard", "projector"}, nil)
+	createResourceWithAttrs(t, app, adminToken, "Room B", []string{"tv"}, nil)
+
+	resp := performRequest(t, app, nethttp.MethodGet, "/equipment", nil, "")
+	if resp.Code != nethttp.StatusOK {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusOK, resp.Code)
+	}
+
+	var payload struct {
+		Items []string `json:"items"`
+	}
+	decodeResponse(t, resp.Body, &payload)
+	if !reflect.DeepEqual(payload.Items, []string{"projector", "tv", "whiteboard"}) {
+		t.Fatalf("unexpected equipment list: %v", payload.Items)
+	}
+}
+
 func newTestApp(t *testing.T) (*App, *service.AuthService) {
 	t.Helper()
 
@@ -272,6 +376,23 @@ func createResourceViaAPI(t *testing.T, app *App, token, name string) int64 {
 	t.Helper()
 
 	resp := performRequest(t, app, nethttp.MethodPost, "/resources", resourcePayload(name), token)
+	if resp.Code != nethttp.StatusCreated {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusCreated, resp.Code)
+	}
+
+	var resource domain.Resource
+	decodeResponse(t, resp.Body, &resource)
+	return resource.ID
+}
+
+func createResourceWithAttrs(t *testing.T, app *App, token, name string, equipment, imageURLs []string) int64 {
+	t.Helper()
+
+	payload := resourcePayload(name)
+	payload["equipment"] = equipment
+	payload["image_urls"] = imageURLs
+
+	resp := performRequest(t, app, nethttp.MethodPost, "/resources", payload, token)
 	if resp.Code != nethttp.StatusCreated {
 		t.Fatalf("expected status %d, got %d", nethttp.StatusCreated, resp.Code)
 	}

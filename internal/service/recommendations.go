@@ -106,7 +106,7 @@ func (s *BookingService) RecommendSchedule(req ScheduleRecommendationRequest) ([
 		return nil, errors.New("search window must contain at least one 15-minute slot")
 	}
 
-	resources := s.resources.ListResources(resourceType, true)
+	resources := s.resources.ListResources(resourceType, true, nil)
 	if len(resources) == 0 {
 		return []ScheduleRecommendationCandidate{}, nil
 	}

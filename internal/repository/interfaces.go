@@ -19,7 +19,8 @@ type ResourceRepository interface {
 	CreateResource(resource domain.Resource) (domain.Resource, error)
 	UpdateResource(id int64, update domain.Resource) (domain.Resource, error)
 	GetResource(id int64) (domain.Resource, error)
-	ListResources(resourceType domain.ResourceType, onlyActive bool) []domain.Resource
+	ListResources(resourceType domain.ResourceType, onlyActive bool, equipment []string) []domain.Resource
+	ListEquipment() []string
 }
 
 type BookingRepository interface {
@@ -28,7 +29,7 @@ type BookingRepository interface {
 	CancelBooking(id int64, cancelledAt time.Time) (domain.Booking, error)
 	ListBookingsByUser(userID int64) []domain.Booking
 	ListBookings() []domain.Booking
-	ListAvailableResources(start, end time.Time, resourceType domain.ResourceType) []domain.Resource
+	ListAvailableResources(start, end time.Time, resourceType domain.ResourceType, equipment []string) []domain.Resource
 }
 
 type Store interface {

@@ -2,9 +2,11 @@ package service
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
+	"diplom/internal/cache"
 	"diplom/internal/domain"
 	"diplom/internal/repository"
 )
@@ -51,7 +53,7 @@ func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 	resourceService := NewResourceService(store, c)
 	bookingService := NewBookingService(store, store, c)
 
-	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room")
+	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 	start := time.Now().UTC().Add(2 * time.Hour).Truncate(time.Second)
 	end := start.Add(time.Hour)
 
-	first, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom)
+	first, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom, nil)
 	if err != nil {
 		t.Fatalf("first availability: %v", err)
 	}
@@ -70,7 +72,7 @@ func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 		t.Fatal("expected cache set on first request")
 	}
 
-	second, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom)
+	second, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom, nil)
 	if err != nil {
 		t.Fatalf("second availability: %v", err)
 	}
@@ -88,7 +90,7 @@ func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testi
 	resourceService := NewResourceService(store, c)
 	bookingService := NewBookingService(store, store, c)
 
-	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room")
+	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testi
 	start := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
 	end := start.Add(time.Hour)
 
-	if _, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom); err != nil {
+	if _, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom, nil); err != nil {
 		t.Fatalf("prime availability cache: %v", err)
 	}
 	if _, err := bookingService.UtilizationReport(start, end); err != nil {
@@ -119,5 +121,96 @@ func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testi
 	}
 	if !foundAvailability || !foundUtilization {
 		t.Fatalf("expected both cache prefixes invalidated, got %v", c.deleteCalls)
+	}
+}
+
+func TestResourceServiceNormalizesImagesAndEquipment(t *testing.T) {
+	store := repository.NewMemoryStore()
+	resourceService := NewResourceService(store, cache.NewNoop())
+
+	resource, err := resourceService.Create(
+		"Room A",
+		domain.ResourceMeetingRoom,
+		"HQ",
+		8,
+		"Room",
+		[]string{" https://example.com/a.jpg ", "https://example.com/a.jpg", "", "https://example.com/b.jpg"},
+		[]string{" Projector ", "whiteboard", "projector", ""},
+	)
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+
+	if !reflect.DeepEqual(resource.ImageURLs, []string{"https://example.com/a.jpg", "https://example.com/b.jpg"}) {
+		t.Fatalf("unexpected image urls: %v", resource.ImageURLs)
+	}
+	if !reflect.DeepEqual(resource.Equipment, []string{"projector", "whiteboard"}) {
+		t.Fatalf("unexpected equipment: %v", resource.Equipment)
+	}
+}
+
+func TestResourceServiceUpdateReplacesImagesAndEquipment(t *testing.T) {
+	store := repository.NewMemoryStore()
+	resourceService := NewResourceService(store, cache.NewNoop())
+
+	resource, err := resourceService.Create(
+		"Room A",
+		domain.ResourceMeetingRoom,
+		"HQ",
+		8,
+		"Room",
+		[]string{"https://example.com/a.jpg"},
+		[]string{"projector"},
+	)
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+
+	updated, err := resourceService.Update(
+		resource.ID,
+		"Room A",
+		domain.ResourceMeetingRoom,
+		"HQ",
+		8,
+		"Room updated",
+		[]string{"https://example.com/b.jpg"},
+		[]string{"tv"},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("update resource: %v", err)
+	}
+
+	if !reflect.DeepEqual(updated.ImageURLs, []string{"https://example.com/b.jpg"}) {
+		t.Fatalf("unexpected image urls after update: %v", updated.ImageURLs)
+	}
+	if !reflect.DeepEqual(updated.Equipment, []string{"tv"}) {
+		t.Fatalf("unexpected equipment after update: %v", updated.Equipment)
+	}
+}
+
+func TestBookingServiceAvailabilityFiltersByEquipment(t *testing.T) {
+	store := repository.NewMemoryStore()
+	resourceService := NewResourceService(store, cache.NewNoop())
+	bookingService := NewBookingService(store, store, cache.NewNoop())
+
+	_, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, []string{"projector"})
+	if err != nil {
+		t.Fatalf("create room A: %v", err)
+	}
+	roomB, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, []string{"projector", "whiteboard"})
+	if err != nil {
+		t.Fatalf("create room B: %v", err)
+	}
+
+	start := time.Now().UTC().Add(8 * time.Hour).Truncate(time.Second)
+	end := start.Add(time.Hour)
+
+	items, err := bookingService.Availability(start, end, domain.ResourceMeetingRoom, []string{"projector", "whiteboard"})
+	if err != nil {
+		t.Fatalf("availability: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != roomB.ID {
+		t.Fatalf("unexpected filtered availability: %+v", items)
 	}
 }

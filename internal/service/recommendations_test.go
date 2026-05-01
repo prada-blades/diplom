@@ -14,11 +14,11 @@ func TestRecommendScheduleReturnsPreferredSlotFirst(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	smallRoom, err := resourceService.Create("Small", domain.ResourceMeetingRoom, "HQ", 4, "Small room")
+	smallRoom, err := resourceService.Create("Small", domain.ResourceMeetingRoom, "HQ", 4, "Small room", nil, nil)
 	if err != nil {
 		t.Fatalf("create small room: %v", err)
 	}
-	_, err = resourceService.Create("Large", domain.ResourceMeetingRoom, "HQ", 10, "Large room")
+	_, err = resourceService.Create("Large", domain.ResourceMeetingRoom, "HQ", 10, "Large room", nil, nil)
 	if err != nil {
 		t.Fatalf("create large room: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestRecommendScheduleFindsNearestSlotWhenPreferredIsBusy(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	room, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Main room")
+	room, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Main room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -84,11 +84,11 @@ func TestRecommendSchedulePrefersSmallerCapacityExcess(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	compactRoom, err := resourceService.Create("Compact", domain.ResourceMeetingRoom, "HQ", 4, "Compact room")
+	compactRoom, err := resourceService.Create("Compact", domain.ResourceMeetingRoom, "HQ", 4, "Compact room", nil, nil)
 	if err != nil {
 		t.Fatalf("create compact room: %v", err)
 	}
-	_, err = resourceService.Create("Oversized", domain.ResourceMeetingRoom, "HQ", 12, "Oversized room")
+	_, err = resourceService.Create("Oversized", domain.ResourceMeetingRoom, "HQ", 12, "Oversized room", nil, nil)
 	if err != nil {
 		t.Fatalf("create oversized room: %v", err)
 	}
@@ -118,11 +118,11 @@ func TestRecommendSchedulePrefersLessUtilizedRoomWhenCapacityMatches(t *testing.
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	busyRoom, err := resourceService.Create("Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room")
+	busyRoom, err := resourceService.Create("Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room", nil, nil)
 	if err != nil {
 		t.Fatalf("create busy room: %v", err)
 	}
-	idleRoom, err := resourceService.Create("Idle", domain.ResourceMeetingRoom, "HQ", 6, "Idle room")
+	idleRoom, err := resourceService.Create("Idle", domain.ResourceMeetingRoom, "HQ", 6, "Idle room", nil, nil)
 	if err != nil {
 		t.Fatalf("create idle room: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestRecommendScheduleAllowsAdjacentIntervals(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	room, err := resourceService.Create("Room Adjacent", domain.ResourceMeetingRoom, "HQ", 6, "Adjacent room")
+	room, err := resourceService.Create("Room Adjacent", domain.ResourceMeetingRoom, "HQ", 6, "Adjacent room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestRecommendScheduleReturnsEmptyWhenNoCandidatesExist(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	room, err := resourceService.Create("Room Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room")
+	room, err := resourceService.Create("Room Busy", domain.ResourceMeetingRoom, "HQ", 6, "Busy room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -218,11 +218,11 @@ func TestUtilizationReportIncludesHourAndWeekdayStats(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	roomA, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Room A")
+	roomA, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 6, "Room A", nil, nil)
 	if err != nil {
 		t.Fatalf("create room A: %v", err)
 	}
-	roomB, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 6, "Room B")
+	roomB, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 6, "Room B", nil, nil)
 	if err != nil {
 		t.Fatalf("create room B: %v", err)
 	}

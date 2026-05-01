@@ -10,6 +10,8 @@
 - Redis-кэш для read-only endpoint'ов с graceful fallback;
 - роли `employee` и `admin` с разграничением прав на уровне сервера;
 - справочник ресурсов (`meeting_room`, `workspace`);
+- картинки ресурсов через массив URL;
+- оборудование ресурсов в виде тегов со справочником и фильтрацией;
 - создание и отмена бронирований;
 - поиск доступных ресурсов по временному интервалу;
 - подбор оптимальных вариантов бронирования переговорной по времени, вместимости и исторической загрузке;
@@ -117,6 +119,7 @@ go test ./...
 - Markdown API-документация: `API.md`
 - OpenAPI-спецификация: `openapi.yaml`
 - SQL-миграция: `internal/repository/postgres/migrations/001_init.sql`
+- Дополнительная миграция изображений и оборудования: `internal/repository/postgres/migrations/002_resources_media_equipment.sql`
 
 ## Основные endpoint'ы
 
@@ -125,6 +128,7 @@ go test ./...
 - `POST /auth/login`
 - `GET /me`
 - `GET /resources`
+- `GET /equipment`
 - `POST /resources` (admin)
 - `PUT /resources/{id}` (admin)
 - `DELETE /resources/{id}` (admin)
@@ -135,3 +139,5 @@ go test ./...
 - `DELETE /bookings/{id}`
 - `GET /admin/bookings` (admin)
 - `GET /admin/reports/utilization?start=...&end=...` (admin)
+
+Ресурсы теперь поддерживают поля `image_urls` и `equipment`. Для `GET /resources` и `GET /availability` можно передавать повторяемый query-параметр `equipment`, например `?equipment=projector&equipment=whiteboard`, чтобы получить только помещения со всеми указанными тегами.

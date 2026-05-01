@@ -91,6 +91,7 @@ func (a *App) registerRoutes(mux *nethttp.ServeMux) {
 
 	mux.Handle("/resources", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResources), nethttp.MethodPost))
 	mux.Handle("/resources/", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResourceByID), nethttp.MethodPut, nethttp.MethodDelete))
+	mux.HandleFunc("/equipment", a.handleEquipment)
 
 	mux.Handle("/availability", a.requireAuth(nethttp.HandlerFunc(a.handleAvailability)))
 	mux.Handle("/recommendations/schedule", a.requireAuth(nethttp.HandlerFunc(a.handleScheduleRecommendations)))
@@ -188,6 +189,8 @@ type resourceRequest struct {
 	Location    string              `json:"location"`
 	Capacity    int                 `json:"capacity"`
 	Description string              `json:"description"`
+	ImageURLs   []string            `json:"image_urls"`
+	Equipment   []string            `json:"equipment"`
 	IsActive    *bool               `json:"is_active,omitempty"`
 }
 
@@ -196,8 +199,9 @@ func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 	case nethttp.MethodGet:
 		resourceType := domain.ResourceType(r.URL.Query().Get("type"))
 		onlyActive := r.URL.Query().Get("include_inactive") != "true"
+		equipment := r.URL.Query()["equipment"]
 		writeJSON(w, nethttp.StatusOK, map[string]any{
-			"items": a.resourceService.List(resourceType, onlyActive),
+			"items": a.resourceService.List(resourceType, onlyActive, equipment),
 		})
 	case nethttp.MethodPost:
 		var req resourceRequest
@@ -206,7 +210,7 @@ func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 			return
 		}
 
-		resource, err := a.resourceService.Create(req.Name, req.Type, req.Location, req.Capacity, req.Description)
+		resource, err := a.resourceService.Create(req.Name, req.Type, req.Location, req.Capacity, req.Description, req.ImageURLs, req.Equipment)
 		if err != nil {
 			writeError(w, nethttp.StatusBadRequest, "resource_create_failed", err.Error())
 			return
@@ -245,7 +249,7 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 			isActive = *req.IsActive
 		}
 
-		resource, err := a.resourceService.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, isActive)
+		resource, err := a.resourceService.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, req.ImageURLs, req.Equipment, isActive)
 		if err != nil {
 			writeError(w, nethttp.StatusBadRequest, "resource_update_failed", err.Error())
 			return
@@ -265,6 +269,17 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 }
 
+func (a *App) handleEquipment(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if r.Method != nethttp.MethodGet {
+		writeError(w, nethttp.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	writeJSON(w, nethttp.StatusOK, map[string]any{
+		"items": a.resourceService.ListEquipment(),
+	})
+}
+
 func (a *App) handleAvailability(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if r.Method != nethttp.MethodGet {
 		writeError(w, nethttp.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -278,7 +293,8 @@ func (a *App) handleAvailability(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	resourceType := domain.ResourceType(r.URL.Query().Get("type"))
-	items, err := a.bookingService.Availability(start, end, resourceType)
+	equipment := r.URL.Query()["equipment"]
+	items, err := a.bookingService.Availability(start, end, resourceType, equipment)
 	if err != nil {
 		writeError(w, nethttp.StatusBadRequest, "availability_failed", err.Error())
 		return

@@ -14,7 +14,7 @@ func TestBookingServiceCreateRejectsOverlappingBookings(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Main room")
+	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Main room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestBookingServiceCreateAllowsAdjacentBookings(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	resource, err := resourceService.Create("Desk 1", domain.ResourceWorkspace, "HQ", 0, "Window desk")
+	resource, err := resourceService.Create("Desk 1", domain.ResourceWorkspace, "HQ", 0, "Window desk", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestBookingServiceCreateRejectsPastBooking(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	resource, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 4, "Small room")
+	resource, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 4, "Small room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestBookingServiceCancelRespectsOwnership(t *testing.T) {
 	resourceService := NewResourceService(store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
-	resource, err := resourceService.Create("Room C", domain.ResourceMeetingRoom, "HQ", 6, "Project room")
+	resource, err := resourceService.Create("Room C", domain.ResourceMeetingRoom, "HQ", 6, "Project room", nil, nil)
 	if err != nil {
 		t.Fatalf("create resource: %v", err)
 	}

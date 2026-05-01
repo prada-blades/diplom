@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"diplom/internal/cache"
 	"diplom/internal/domain"
@@ -178,7 +181,7 @@ func hashPassword(password string) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
-func (s *ResourceService) Create(name string, resourceType domain.ResourceType, location string, capacity int, description string) (domain.Resource, error) {
+func (s *ResourceService) Create(name string, resourceType domain.ResourceType, location string, capacity int, description string, imageURLs, equipment []string) (domain.Resource, error) {
 	if strings.TrimSpace(name) == "" || resourceType == "" || strings.TrimSpace(location) == "" {
 		return domain.Resource{}, errors.New("name, type and location are required")
 	}
@@ -189,6 +192,12 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 		return domain.Resource{}, errors.New("meeting room capacity must be positive")
 	}
 
+	normalizedImages, err := normalizeImageURLs(imageURLs)
+	if err != nil {
+		return domain.Resource{}, err
+	}
+	normalizedEquipment := normalizeEquipment(equipment)
+
 	now := time.Now().UTC()
 	resource := domain.Resource{
 		Name:        strings.TrimSpace(name),
@@ -196,6 +205,8 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 		Location:    strings.TrimSpace(location),
 		Capacity:    capacity,
 		Description: strings.TrimSpace(description),
+		ImageURLs:   normalizedImages,
+		Equipment:   normalizedEquipment,
 		IsActive:    true,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -210,7 +221,7 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 	return created, nil
 }
 
-func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, isActive bool) (domain.Resource, error) {
+func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, imageURLs, equipment []string, isActive bool) (domain.Resource, error) {
 	current, err := s.resources.GetResource(id)
 	if err != nil {
 		return domain.Resource{}, err
@@ -218,12 +229,26 @@ func (s *ResourceService) Update(id int64, name string, resourceType domain.Reso
 	if strings.TrimSpace(name) == "" || resourceType == "" || strings.TrimSpace(location) == "" {
 		return domain.Resource{}, errors.New("name, type and location are required")
 	}
+	if resourceType != domain.ResourceMeetingRoom && resourceType != domain.ResourceWorkspace {
+		return domain.Resource{}, errors.New("invalid resource type")
+	}
+	if resourceType == domain.ResourceMeetingRoom && capacity <= 0 {
+		return domain.Resource{}, errors.New("meeting room capacity must be positive")
+	}
+
+	normalizedImages, err := normalizeImageURLs(imageURLs)
+	if err != nil {
+		return domain.Resource{}, err
+	}
+	normalizedEquipment := normalizeEquipment(equipment)
 
 	current.Name = strings.TrimSpace(name)
 	current.Type = resourceType
 	current.Location = strings.TrimSpace(location)
 	current.Capacity = capacity
 	current.Description = strings.TrimSpace(description)
+	current.ImageURLs = normalizedImages
+	current.Equipment = normalizedEquipment
 	current.IsActive = isActive
 	current.UpdatedAt = time.Now().UTC()
 
@@ -258,8 +283,12 @@ func (s *ResourceService) Get(id int64) (domain.Resource, error) {
 	return s.resources.GetResource(id)
 }
 
-func (s *ResourceService) List(resourceType domain.ResourceType, onlyActive bool) []domain.Resource {
-	return s.resources.ListResources(resourceType, onlyActive)
+func (s *ResourceService) List(resourceType domain.ResourceType, onlyActive bool, equipment []string) []domain.Resource {
+	return s.resources.ListResources(resourceType, onlyActive, normalizeEquipment(equipment))
+}
+
+func (s *ResourceService) ListEquipment() []string {
+	return s.resources.ListEquipment()
 }
 
 func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, purpose string) (domain.Booking, error) {
@@ -326,18 +355,19 @@ func (s *BookingService) ListAll() []domain.Booking {
 	return s.bookings.ListBookings()
 }
 
-func (s *BookingService) Availability(start, end time.Time, resourceType domain.ResourceType) ([]domain.Resource, error) {
+func (s *BookingService) Availability(start, end time.Time, resourceType domain.ResourceType, equipment []string) ([]domain.Resource, error) {
 	if !start.Before(end) {
 		return nil, errors.New("start_time must be before end_time")
 	}
 
-	key := buildAvailabilityCacheKey(start.UTC(), end.UTC(), resourceType)
+	normalizedEquipment := normalizeEquipment(equipment)
+	key := buildAvailabilityCacheKey(start.UTC(), end.UTC(), resourceType, normalizedEquipment)
 	var items []domain.Resource
 	if ok := loadCachedJSON(s.cache, key, &items); ok {
 		return items, nil
 	}
 
-	items = s.bookings.ListAvailableResources(start.UTC(), end.UTC(), resourceType)
+	items = s.bookings.ListAvailableResources(start.UTC(), end.UTC(), resourceType, normalizedEquipment)
 	storeCachedJSON(s.cache, key, items, defaultCacheTTL)
 	return items, nil
 }
@@ -348,7 +378,7 @@ func (s *BookingService) Utilization(start, end time.Time) ([]domain.Utilization
 	}
 
 	bookings := s.bookings.ListBookings()
-	resources := s.resources.ListResources("", false)
+	resources := s.resources.ListResources("", false, nil)
 	resourceByID := make(map[int64]domain.Resource, len(resources))
 	for _, resource := range resources {
 		resourceByID[resource.ID] = resource
@@ -397,8 +427,8 @@ func (s *ResourceService) invalidateReadCache() {
 	_ = s.cache.DeleteByPrefix(utilizationCachePrefix)
 }
 
-func buildAvailabilityCacheKey(start, end time.Time, resourceType domain.ResourceType) string {
-	return availabilityCachePrefix + start.Format(time.RFC3339) + ":" + end.Format(time.RFC3339) + ":" + string(resourceType)
+func buildAvailabilityCacheKey(start, end time.Time, resourceType domain.ResourceType, equipment []string) string {
+	return availabilityCachePrefix + start.Format(time.RFC3339) + ":" + end.Format(time.RFC3339) + ":" + string(resourceType) + ":" + strings.Join(equipment, ",")
 }
 
 func buildUtilizationCacheKey(start, end time.Time) string {
@@ -421,6 +451,70 @@ func storeCachedJSON(c cache.Cache, key string, payload any, ttl time.Duration) 
 	}
 
 	_ = c.Set(key, data, ttl)
+}
+
+func normalizeImageURLs(values []string) ([]string, error) {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		parsed, err := url.Parse(trimmed)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return nil, fmt.Errorf("invalid image url: %s", trimmed)
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result, nil
+}
+
+func normalizeEquipment(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		slug := slugify(value)
+		if slug == "" {
+			continue
+		}
+		if _, ok := seen[slug]; ok {
+			continue
+		}
+		seen[slug] = struct{}{}
+		result = append(result, slug)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func slugify(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	lastDash := false
+	for _, r := range value {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastDash = false
+		case unicode.IsSpace(r) || r == '-' || r == '_' || r == '/':
+			if b.Len() > 0 && !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+
+	result := strings.Trim(b.String(), "-")
+	return result
 }
 
 func minTime(a, b time.Time) time.Time {
