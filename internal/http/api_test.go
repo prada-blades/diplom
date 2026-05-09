@@ -463,8 +463,8 @@ func newTestAppWithStore(t *testing.T) (*App, *service.AuthService, *repository.
 	app := &App{
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		authService:     authService,
-		resourceService: service.NewResourceService(store, store, cache.NewNoop()),
-		bookingService:  service.NewBookingService(store, store, cache.NewNoop()),
+		resourceService: service.NewResourceService(store, store, cache.NewNoop(), nil),
+		bookingService:  service.NewBookingService(store, store, cache.NewNoop(), nil),
 	}
 
 	mux := nethttp.NewServeMux()

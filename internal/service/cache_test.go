@@ -50,8 +50,8 @@ func (c *spyCache) DeleteByPrefix(prefix string) error {
 func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 	store := repository.NewMemoryStore()
 	c := newSpyCache()
-	resourceService := NewResourceService(store, store, c)
-	bookingService := NewBookingService(store, store, c)
+	resourceService := NewResourceService(store, store, c, nil)
+	bookingService := NewBookingService(store, store, c, nil)
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
 	if err != nil {
@@ -87,8 +87,8 @@ func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testing.T) {
 	store := repository.NewMemoryStore()
 	c := newSpyCache()
-	resourceService := NewResourceService(store, store, c)
-	bookingService := NewBookingService(store, store, c)
+	resourceService := NewResourceService(store, store, c, nil)
+	bookingService := NewBookingService(store, store, c, nil)
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
 	if err != nil {
@@ -126,7 +126,7 @@ func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testi
 
 func TestResourceServiceNormalizesImagesAndEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create(
 		"Room A",
@@ -151,7 +151,7 @@ func TestResourceServiceNormalizesImagesAndEquipment(t *testing.T) {
 
 func TestResourceServiceUpdateReplacesImagesAndEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create(
 		"Room A",
@@ -191,8 +191,8 @@ func TestResourceServiceUpdateReplacesImagesAndEquipment(t *testing.T) {
 
 func TestBookingServiceAvailabilityFiltersByEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	_, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, []string{"projector"})
 	if err != nil {

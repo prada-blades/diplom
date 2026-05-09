@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -33,30 +34,32 @@ type ResourceService struct {
 	resources repository.ResourceRepository
 	bookings  repository.BookingRepository
 	cache     cache.Cache
+	notif     *NotificationService
 }
 
 type BookingService struct {
 	bookings  repository.BookingRepository
 	resources repository.ResourceRepository
 	cache     cache.Cache
+	notif     *NotificationService
 }
 
 func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthService {
 	return &AuthService{users: users, jwtSecret: []byte(jwtSecret)}
 }
 
-func NewResourceService(resources repository.ResourceRepository, bookings repository.BookingRepository, c cache.Cache) *ResourceService {
+func NewResourceService(resources repository.ResourceRepository, bookings repository.BookingRepository, c cache.Cache, notif *NotificationService) *ResourceService {
 	if c == nil {
 		c = cache.NewNoop()
 	}
-	return &ResourceService{resources: resources, bookings: bookings, cache: c}
+	return &ResourceService{resources: resources, bookings: bookings, cache: c, notif: notif}
 }
 
-func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository, c cache.Cache) *BookingService {
+func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository, c cache.Cache, notif *NotificationService) *BookingService {
 	if c == nil {
 		c = cache.NewNoop()
 	}
-	return &BookingService{bookings: bookings, resources: resources, cache: c}
+	return &BookingService{bookings: bookings, resources: resources, cache: c, notif: notif}
 }
 
 func (s *AuthService) SeedAdmin(fullName, email, password string) error {
@@ -317,7 +320,33 @@ func (s *ResourceService) cancelFutureBookingsOnDeactivation(resource domain.Res
 		return 0, nil
 	}
 
-	return s.bookings.CancelFutureBookingsByResource(resource.ID, deactivatedAt)
+	// Collect affected user IDs before cancelling to send notifications.
+	var affectedUserIDs []int64
+	seen := make(map[int64]bool)
+	for _, b := range s.bookings.ListBookings() {
+		if b.ResourceID == resource.ID && b.Status == domain.BookingActive && b.StartTime.After(deactivatedAt) {
+			if !seen[b.UserID] {
+				affectedUserIDs = append(affectedUserIDs, b.UserID)
+				seen[b.UserID] = true
+			}
+		}
+	}
+
+	count, err := s.bookings.CancelFutureBookingsByResource(resource.ID, deactivatedAt)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(affectedUserIDs) > 0 {
+		go s.notif.Notify(
+			affectedUserIDs,
+			"Ресурс недоступен",
+			fmt.Sprintf("«%s» деактивирован, ваша бронь отменена", resource.Name),
+			map[string]string{"event": "resource_disabled", "resource_id": strconv.FormatInt(resource.ID, 10)},
+		)
+	}
+
+	return count, nil
 }
 
 func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, purpose string) (domain.Booking, error) {
@@ -352,6 +381,14 @@ func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, 
 	}
 
 	s.invalidateReadCache()
+
+	go s.notif.Notify(
+		[]int64{created.UserID},
+		"Бронирование создано",
+		fmt.Sprintf("%s · %s–%s", resource.Name, created.StartTime.Format("02.01 15:04"), created.EndTime.Format("15:04")),
+		map[string]string{"event": "booking_created", "booking_id": strconv.FormatInt(created.ID, 10)},
+	)
+
 	return created, nil
 }
 
@@ -373,6 +410,15 @@ func (s *BookingService) Cancel(requestUser domain.User, bookingID int64) (domai
 	}
 
 	s.invalidateReadCache()
+
+	resource, _ := s.resources.GetResource(cancelled.ResourceID)
+	go s.notif.Notify(
+		[]int64{cancelled.UserID},
+		"Бронирование отменено",
+		fmt.Sprintf("%s · %s–%s", resource.Name, cancelled.StartTime.Format("02.01 15:04"), cancelled.EndTime.Format("15:04")),
+		map[string]string{"event": "booking_cancelled", "booking_id": strconv.FormatInt(cancelled.ID, 10)},
+	)
+
 	return cancelled, nil
 }
 

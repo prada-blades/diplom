@@ -27,7 +27,11 @@ type App struct {
 	authService     *service.AuthService
 	resourceService *service.ResourceService
 	bookingService  *service.BookingService
-	server          *nethttp.Server
+	userRepo        interface {
+		SaveFCMToken(userID int64, token string) error
+		DeleteFCMToken(userID int64, token string) error
+	}
+	server *nethttp.Server
 }
 
 func NewApp() (*App, error) {
@@ -52,8 +56,15 @@ func NewApp() (*App, error) {
 	}
 
 	authService := service.NewAuthService(store, cfg.JWTSecret)
-	resourceService := service.NewResourceService(store, store, appCache)
-	bookingService := service.NewBookingService(store, store, appCache)
+
+	notifService, err := service.NewNotificationService(cfg.FirebaseCredentials, store)
+	if err != nil {
+		logger.Warn("firebase unavailable, push notifications disabled", "error", err)
+		notifService = nil
+	}
+
+	resourceService := service.NewResourceService(store, store, appCache, notifService)
+	bookingService := service.NewBookingService(store, store, appCache, notifService)
 
 	if err := authService.SeedAdmin(cfg.DefaultAdmin.FullName, cfg.DefaultAdmin.Email, cfg.DefaultAdmin.Password); err != nil {
 		_ = store.Close()
@@ -66,6 +77,7 @@ func NewApp() (*App, error) {
 		authService:     authService,
 		resourceService: resourceService,
 		bookingService:  bookingService,
+		userRepo:        store,
 	}
 
 	mux := nethttp.NewServeMux()
@@ -88,6 +100,7 @@ func (a *App) registerRoutes(mux *nethttp.ServeMux) {
 	mux.HandleFunc("/auth/register", a.handleRegister)
 	mux.HandleFunc("/auth/login", a.handleLogin)
 	mux.Handle("/me", a.requireAuth(nethttp.HandlerFunc(a.handleMe)))
+	mux.Handle("/me/fcm-token", a.requireAuth(nethttp.HandlerFunc(a.handleFCMToken)))
 
 	mux.Handle("/resources", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResources), nethttp.MethodPost))
 	mux.Handle("/resources/", a.requireAdminForMethods(nethttp.HandlerFunc(a.handleResourceByID), nethttp.MethodPut, nethttp.MethodDelete))
@@ -181,6 +194,40 @@ func (a *App) handleMe(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	writeJSON(w, nethttp.StatusOK, currentUser(r))
+}
+
+type fcmTokenRequest struct {
+	Token string `json:"token"`
+}
+
+func (a *App) handleFCMToken(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req fcmTokenRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, nethttp.StatusBadRequest, "invalid_json", err.Error())
+		return
+	}
+	if req.Token == "" {
+		writeError(w, nethttp.StatusBadRequest, "missing_token", "token is required")
+		return
+	}
+
+	user := currentUser(r)
+	switch r.Method {
+	case nethttp.MethodPost:
+		if err := a.userRepo.SaveFCMToken(user.ID, req.Token); err != nil {
+			writeError(w, nethttp.StatusInternalServerError, "fcm_token_save_failed", err.Error())
+			return
+		}
+		writeJSON(w, nethttp.StatusOK, map[string]any{"ok": true})
+	case nethttp.MethodDelete:
+		if err := a.userRepo.DeleteFCMToken(user.ID, req.Token); err != nil {
+			writeError(w, nethttp.StatusInternalServerError, "fcm_token_delete_failed", err.Error())
+			return
+		}
+		writeJSON(w, nethttp.StatusOK, map[string]any{"ok": true})
+	default:
+		writeError(w, nethttp.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
 }
 
 type resourceRequest struct {
