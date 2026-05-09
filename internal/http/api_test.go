@@ -8,6 +8,7 @@ import (
 	nethttp "net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -281,6 +282,146 @@ func TestAvailabilityFilterByEquipment(t *testing.T) {
 	}
 }
 
+func TestDeleteResourceCancelsFutureBookingsAndReturnsCount(t *testing.T) {
+	app, auth, store := newTestAppWithStore(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+	employeeToken := mustLogin(t, auth, "employee@example.com", "password123")
+
+	resourceID := createResourceViaAPI(t, app, adminToken, "Room Auto Cancel")
+	now := time.Now().UTC().Truncate(time.Second)
+	currentStart := now.Add(-30 * time.Minute)
+	currentEnd := now.Add(30 * time.Minute)
+	futureStart := now.Add(3 * time.Hour)
+	futureEnd := futureStart.Add(time.Hour)
+
+	// Seed an active in-progress booking directly in memory to avoid past-booking validation.
+	currentBooking, err := store.CreateBooking(domain.Booking{
+		ResourceID: resourceID,
+		UserID:     1,
+		StartTime:  currentStart,
+		EndTime:    currentEnd,
+		Status:     domain.BookingActive,
+		Purpose:    "current",
+		CreatedAt:  now.Add(-1 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("seed current booking: %v", err)
+	}
+	futureResp := performRequest(t, app, nethttp.MethodPost, "/bookings", map[string]any{
+		"resource_id": resourceID,
+		"start_time":  futureStart.Format(time.RFC3339),
+		"end_time":    futureEnd.Format(time.RFC3339),
+		"purpose":     "future",
+	}, employeeToken)
+	if futureResp.Code != nethttp.StatusCreated {
+		t.Fatalf("expected booking create status %d, got %d", nethttp.StatusCreated, futureResp.Code)
+	}
+	var futureBooking domain.Booking
+	decodeResponse(t, futureResp.Body, &futureBooking)
+
+	resp := performRequest(t, app, nethttp.MethodDelete, "/resources/"+strconv.FormatInt(resourceID, 10), nil, adminToken)
+	if resp.Code != nethttp.StatusOK {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusOK, resp.Code)
+	}
+
+	var payload struct {
+		Resource               domain.Resource `json:"resource"`
+		CancelledBookingsCount int             `json:"cancelled_bookings_count"`
+	}
+	decodeResponse(t, resp.Body, &payload)
+	if payload.CancelledBookingsCount != 1 {
+		t.Fatalf("expected 1 cancelled booking, got %d", payload.CancelledBookingsCount)
+	}
+	if payload.Resource.IsActive {
+		t.Fatal("expected returned resource to be inactive")
+	}
+
+	gotCurrent, err := store.GetBooking(currentBooking.ID)
+	if err != nil {
+		t.Fatalf("get current booking: %v", err)
+	}
+	if gotCurrent.Status != domain.BookingActive {
+		t.Fatalf("expected current booking to remain active, got %s", gotCurrent.Status)
+	}
+
+	gotFuture, err := store.GetBooking(futureBooking.ID)
+	if err != nil {
+		t.Fatalf("get future booking: %v", err)
+	}
+	if gotFuture.Status != domain.BookingCancelled {
+		t.Fatalf("expected future booking cancelled, got %s", gotFuture.Status)
+	}
+}
+
+func TestPutResourceInactiveCancelsFutureBookingsAndBlocksNewOnes(t *testing.T) {
+	app, auth, store := newTestAppWithStore(t)
+	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
+	employeeToken := mustLogin(t, auth, "employee@example.com", "password123")
+
+	resourceID := createResourceViaAPI(t, app, adminToken, "Room Put Inactive")
+	start := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
+	end := start.Add(time.Hour)
+
+	createResp := performRequest(t, app, nethttp.MethodPost, "/bookings", map[string]any{
+		"resource_id": resourceID,
+		"start_time":  start.Format(time.RFC3339),
+		"end_time":    end.Format(time.RFC3339),
+		"purpose":     "future",
+	}, employeeToken)
+	if createResp.Code != nethttp.StatusCreated {
+		t.Fatalf("expected booking create status %d, got %d", nethttp.StatusCreated, createResp.Code)
+	}
+	var booking domain.Booking
+	decodeResponse(t, createResp.Body, &booking)
+
+	updatePayload := resourcePayload("Room Put Inactive")
+	updatePayload["is_active"] = false
+	resp := performRequest(t, app, nethttp.MethodPut, "/resources/"+strconv.FormatInt(resourceID, 10), updatePayload, adminToken)
+	if resp.Code != nethttp.StatusOK {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusOK, resp.Code)
+	}
+
+	var payload struct {
+		Resource               domain.Resource `json:"resource"`
+		CancelledBookingsCount int             `json:"cancelled_bookings_count"`
+	}
+	decodeResponse(t, resp.Body, &payload)
+	if payload.CancelledBookingsCount != 1 {
+		t.Fatalf("expected 1 cancelled booking, got %d", payload.CancelledBookingsCount)
+	}
+	if payload.Resource.IsActive {
+		t.Fatal("expected updated resource to be inactive")
+	}
+
+	gotBooking, err := store.GetBooking(booking.ID)
+	if err != nil {
+		t.Fatalf("get booking: %v", err)
+	}
+	if gotBooking.Status != domain.BookingCancelled {
+		t.Fatalf("expected booking cancelled, got %s", gotBooking.Status)
+	}
+
+	newResp := performRequest(t, app, nethttp.MethodPost, "/bookings", map[string]any{
+		"resource_id": resourceID,
+		"start_time":  start.Add(2 * time.Hour).Format(time.RFC3339),
+		"end_time":    end.Add(2 * time.Hour).Format(time.RFC3339),
+		"purpose":     "new",
+	}, employeeToken)
+	if newResp.Code != nethttp.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusBadRequest, newResp.Code)
+	}
+
+	var errPayload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	decodeResponse(t, newResp.Body, &errPayload)
+	if errPayload.Error.Message != "resource is inactive" {
+		t.Fatalf("expected inactive resource error, got %q", errPayload.Error.Message)
+	}
+}
+
 func TestEquipmentEndpointReturnsSortedTags(t *testing.T) {
 	app, auth := newTestApp(t)
 	adminToken := mustLogin(t, auth, "admin@corp.local", "admin123")
@@ -303,6 +444,11 @@ func TestEquipmentEndpointReturnsSortedTags(t *testing.T) {
 }
 
 func newTestApp(t *testing.T) (*App, *service.AuthService) {
+	app, auth, _ := newTestAppWithStore(t)
+	return app, auth
+}
+
+func newTestAppWithStore(t *testing.T) (*App, *service.AuthService, *repository.MemoryStore) {
 	t.Helper()
 
 	store := repository.NewMemoryStore()
@@ -317,7 +463,7 @@ func newTestApp(t *testing.T) (*App, *service.AuthService) {
 	app := &App{
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		authService:     authService,
-		resourceService: service.NewResourceService(store, cache.NewNoop()),
+		resourceService: service.NewResourceService(store, store, cache.NewNoop()),
 		bookingService:  service.NewBookingService(store, store, cache.NewNoop()),
 	}
 
@@ -325,7 +471,7 @@ func newTestApp(t *testing.T) (*App, *service.AuthService) {
 	app.registerRoutes(mux)
 	app.server = &nethttp.Server{Handler: mux}
 
-	return app, authService
+	return app, authService, store
 }
 
 func mustLogin(t *testing.T, auth *service.AuthService, email, password string) string {

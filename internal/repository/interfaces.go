@@ -27,6 +27,7 @@ type BookingRepository interface {
 	CreateBooking(booking domain.Booking) (domain.Booking, error)
 	GetBooking(id int64) (domain.Booking, error)
 	CancelBooking(id int64, cancelledAt time.Time) (domain.Booking, error)
+	CancelFutureBookingsByResource(resourceID int64, from time.Time) (int, error)
 	ListBookingsByUser(userID int64) []domain.Booking
 	ListBookings() []domain.Booking
 	ListAvailableResources(start, end time.Time, resourceType domain.ResourceType, equipment []string) []domain.Resource

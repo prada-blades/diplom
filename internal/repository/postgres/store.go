@@ -469,6 +469,33 @@ func (s *Store) CancelBooking(id int64, cancelledAt time.Time) (domain.Booking, 
 	return s.GetBooking(id)
 }
 
+func (s *Store) CancelFutureBookingsByResource(resourceID int64, from time.Time) (int, error) {
+	result, err := s.db.Exec(
+		`
+			UPDATE bookings
+			SET status = $3, cancelled_at = $4
+			WHERE resource_id = $1
+			  AND status = $5
+			  AND start_time > $2
+		`,
+		resourceID,
+		from,
+		string(domain.BookingCancelled),
+		from,
+		string(domain.BookingActive),
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	return int(rows), nil
+}
+
 func (s *Store) ListBookingsByUser(userID int64) []domain.Booking {
 	rows, err := s.db.Query(
 		`

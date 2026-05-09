@@ -50,7 +50,7 @@ func (c *spyCache) DeleteByPrefix(prefix string) error {
 func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 	store := repository.NewMemoryStore()
 	c := newSpyCache()
-	resourceService := NewResourceService(store, c)
+	resourceService := NewResourceService(store, store, c)
 	bookingService := NewBookingService(store, store, c)
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
@@ -87,7 +87,7 @@ func TestBookingServiceAvailabilityUsesCache(t *testing.T) {
 func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testing.T) {
 	store := repository.NewMemoryStore()
 	c := newSpyCache()
-	resourceService := NewResourceService(store, c)
+	resourceService := NewResourceService(store, store, c)
 	bookingService := NewBookingService(store, store, c)
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, nil)
@@ -126,7 +126,7 @@ func TestBookingServiceCreateInvalidatesAvailabilityAndUtilizationCache(t *testi
 
 func TestResourceServiceNormalizesImagesAndEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create(
 		"Room A",
@@ -151,7 +151,7 @@ func TestResourceServiceNormalizesImagesAndEquipment(t *testing.T) {
 
 func TestResourceServiceUpdateReplacesImagesAndEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop())
 
 	resource, err := resourceService.Create(
 		"Room A",
@@ -181,17 +181,17 @@ func TestResourceServiceUpdateReplacesImagesAndEquipment(t *testing.T) {
 		t.Fatalf("update resource: %v", err)
 	}
 
-	if !reflect.DeepEqual(updated.ImageURLs, []string{"https://example.com/b.jpg"}) {
-		t.Fatalf("unexpected image urls after update: %v", updated.ImageURLs)
+	if !reflect.DeepEqual(updated.Resource.ImageURLs, []string{"https://example.com/b.jpg"}) {
+		t.Fatalf("unexpected image urls after update: %v", updated.Resource.ImageURLs)
 	}
-	if !reflect.DeepEqual(updated.Equipment, []string{"tv"}) {
-		t.Fatalf("unexpected equipment after update: %v", updated.Equipment)
+	if !reflect.DeepEqual(updated.Resource.Equipment, []string{"tv"}) {
+		t.Fatalf("unexpected equipment after update: %v", updated.Resource.Equipment)
 	}
 }
 
 func TestBookingServiceAvailabilityFiltersByEquipment(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop())
 	bookingService := NewBookingService(store, store, cache.NewNoop())
 
 	_, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Room", nil, []string{"projector"})

@@ -141,6 +141,16 @@ components:
             $ref: "#/components/schemas/Resource"
       required:
         - items
+    ResourceDeactivationResponse:
+      type: object
+      properties:
+        resource:
+          $ref: "#/components/schemas/Resource"
+        cancelled_bookings_count:
+          type: integer
+      required:
+        - resource
+        - cancelled_bookings_count
     EquipmentListResponse:
       type: object
       properties:
@@ -644,6 +654,7 @@ paths:
       tags:
         - Resources
       summary: Update a resource
+      description: Updating a resource to `is_active=false` automatically cancels future active bookings with `start_time` after the deactivation moment.
       security:
         - bearerAuth: []
       parameters:
@@ -665,7 +676,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Resource"
+                $ref: "#/components/schemas/ResourceDeactivationResponse"
         "400":
           description: Invalid JSON, invalid resource ID, or resource update failed
           content:
@@ -682,6 +693,7 @@ paths:
       tags:
         - Resources
       summary: Disable a resource
+      description: Disables the resource and automatically cancels future active bookings with `start_time` after the deactivation moment.
       security:
         - bearerAuth: []
       parameters:
@@ -697,7 +709,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Resource"
+                $ref: "#/components/schemas/ResourceDeactivationResponse"
         "400":
           description: Invalid resource ID
           content:

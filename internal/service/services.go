@@ -31,6 +31,7 @@ type AuthService struct {
 
 type ResourceService struct {
 	resources repository.ResourceRepository
+	bookings  repository.BookingRepository
 	cache     cache.Cache
 }
 
@@ -44,11 +45,11 @@ func NewAuthService(users repository.UserRepository, jwtSecret string) *AuthServ
 	return &AuthService{users: users, jwtSecret: []byte(jwtSecret)}
 }
 
-func NewResourceService(resources repository.ResourceRepository, c cache.Cache) *ResourceService {
+func NewResourceService(resources repository.ResourceRepository, bookings repository.BookingRepository, c cache.Cache) *ResourceService {
 	if c == nil {
 		c = cache.NewNoop()
 	}
-	return &ResourceService{resources: resources, cache: c}
+	return &ResourceService{resources: resources, bookings: bookings, cache: c}
 }
 
 func NewBookingService(bookings repository.BookingRepository, resources repository.ResourceRepository, c cache.Cache) *BookingService {
@@ -221,26 +222,33 @@ func (s *ResourceService) Create(name string, resourceType domain.ResourceType, 
 	return created, nil
 }
 
-func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, imageURLs, equipment []string, isActive bool) (domain.Resource, error) {
+type ResourceDeactivationResult struct {
+	Resource               domain.Resource `json:"resource"`
+	CancelledBookingsCount int             `json:"cancelled_bookings_count"`
+}
+
+func (s *ResourceService) Update(id int64, name string, resourceType domain.ResourceType, location string, capacity int, description string, imageURLs, equipment []string, isActive bool) (ResourceDeactivationResult, error) {
 	current, err := s.resources.GetResource(id)
 	if err != nil {
-		return domain.Resource{}, err
+		return ResourceDeactivationResult{}, err
 	}
 	if strings.TrimSpace(name) == "" || resourceType == "" || strings.TrimSpace(location) == "" {
-		return domain.Resource{}, errors.New("name, type and location are required")
+		return ResourceDeactivationResult{}, errors.New("name, type and location are required")
 	}
 	if resourceType != domain.ResourceMeetingRoom && resourceType != domain.ResourceWorkspace {
-		return domain.Resource{}, errors.New("invalid resource type")
+		return ResourceDeactivationResult{}, errors.New("invalid resource type")
 	}
 	if resourceType == domain.ResourceMeetingRoom && capacity <= 0 {
-		return domain.Resource{}, errors.New("meeting room capacity must be positive")
+		return ResourceDeactivationResult{}, errors.New("meeting room capacity must be positive")
 	}
 
 	normalizedImages, err := normalizeImageURLs(imageURLs)
 	if err != nil {
-		return domain.Resource{}, err
+		return ResourceDeactivationResult{}, err
 	}
 	normalizedEquipment := normalizeEquipment(equipment)
+	now := time.Now().UTC()
+	wasActive := current.IsActive
 
 	current.Name = strings.TrimSpace(name)
 	current.Type = resourceType
@@ -250,33 +258,46 @@ func (s *ResourceService) Update(id int64, name string, resourceType domain.Reso
 	current.ImageURLs = normalizedImages
 	current.Equipment = normalizedEquipment
 	current.IsActive = isActive
-	current.UpdatedAt = time.Now().UTC()
+	current.UpdatedAt = now
+
+	cancelledCount := 0
+	if wasActive && !isActive {
+		cancelledCount, err = s.cancelFutureBookingsOnDeactivation(current, now)
+		if err != nil {
+			return ResourceDeactivationResult{}, err
+		}
+	}
 
 	updated, err := s.resources.UpdateResource(id, current)
 	if err != nil {
-		return domain.Resource{}, err
+		return ResourceDeactivationResult{}, err
 	}
 
 	s.invalidateReadCache()
-	return updated, nil
+	return ResourceDeactivationResult{Resource: updated, CancelledBookingsCount: cancelledCount}, nil
 }
 
-func (s *ResourceService) Disable(id int64) (domain.Resource, error) {
+func (s *ResourceService) Disable(id int64) (ResourceDeactivationResult, error) {
 	resource, err := s.resources.GetResource(id)
 	if err != nil {
-		return domain.Resource{}, err
+		return ResourceDeactivationResult{}, err
 	}
 
+	now := time.Now().UTC()
+	cancelledCount, err := s.cancelFutureBookingsOnDeactivation(resource, now)
+	if err != nil {
+		return ResourceDeactivationResult{}, err
+	}
 	resource.IsActive = false
-	resource.UpdatedAt = time.Now().UTC()
+	resource.UpdatedAt = now
 
 	updated, err := s.resources.UpdateResource(id, resource)
 	if err != nil {
-		return domain.Resource{}, err
+		return ResourceDeactivationResult{}, err
 	}
 
 	s.invalidateReadCache()
-	return updated, nil
+	return ResourceDeactivationResult{Resource: updated, CancelledBookingsCount: cancelledCount}, nil
 }
 
 func (s *ResourceService) Get(id int64) (domain.Resource, error) {
@@ -289,6 +310,14 @@ func (s *ResourceService) List(resourceType domain.ResourceType, onlyActive bool
 
 func (s *ResourceService) ListEquipment() []string {
 	return s.resources.ListEquipment()
+}
+
+func (s *ResourceService) cancelFutureBookingsOnDeactivation(resource domain.Resource, deactivatedAt time.Time) (int, error) {
+	if s.bookings == nil {
+		return 0, nil
+	}
+
+	return s.bookings.CancelFutureBookingsByResource(resource.ID, deactivatedAt)
 }
 
 func (s *BookingService) Create(userID, resourceID int64, start, end time.Time, purpose string) (domain.Booking, error) {

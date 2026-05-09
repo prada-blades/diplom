@@ -141,3 +141,4 @@ go test ./...
 - `GET /admin/reports/utilization?start=...&end=...` (admin)
 
 Ресурсы теперь поддерживают поля `image_urls` и `equipment`. Для `GET /resources` и `GET /availability` можно передавать повторяемый query-параметр `equipment`, например `?equipment=projector&equipment=whiteboard`, чтобы получить только помещения со всеми указанными тегами.
+При деактивации ресурса через `PUT /resources/{id}` с `is_active=false` или через `DELETE /resources/{id}` система автоматически отменяет будущие активные брони этого ресурса и возвращает количество отмененных бронирований в ответе API.

@@ -211,6 +211,29 @@ func (s *MemoryStore) CancelBooking(id int64, cancelledAt time.Time) (domain.Boo
 	return booking, nil
 }
 
+func (s *MemoryStore) CancelFutureBookingsByResource(resourceID int64, from time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cancelledCount := 0
+	for id, booking := range s.bookings {
+		if booking.ResourceID != resourceID || booking.Status != domain.BookingActive {
+			continue
+		}
+		if !booking.StartTime.After(from) {
+			continue
+		}
+
+		booking.Status = domain.BookingCancelled
+		cancelledAt := from
+		booking.CancelledAt = &cancelledAt
+		s.bookings[id] = booking
+		cancelledCount++
+	}
+
+	return cancelledCount, nil
+}
+
 func (s *MemoryStore) ListBookingsByUser(userID int64) []domain.Booking {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

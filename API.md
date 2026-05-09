@@ -279,6 +279,8 @@
 
 Обновляет ресурс.
 
+Если в запросе передать `is_active=false`, ресурс деактивируется, а все будущие активные брони этого ресурса автоматически отменяются. Бронь, которая уже идет в момент деактивации, не отменяется.
+
 Требует авторизацию: `admin`
 
 Тело запроса:
@@ -303,6 +305,30 @@
 
 Успешный ответ: `200 OK`
 
+```json
+{
+  "resource": {
+    "id": 1,
+    "name": "Room A Updated",
+    "type": "meeting_room",
+    "location": "Office 3, Floor 2",
+    "capacity": 10,
+    "description": "Updated description",
+    "image_urls": [
+      "https://example.com/rooms/room-a-updated.jpg"
+    ],
+    "equipment": [
+      "tv",
+      "whiteboard"
+    ],
+    "is_active": false,
+    "created_at": "2026-03-01T12:00:00Z",
+    "updated_at": "2026-03-02T08:55:00Z"
+  },
+  "cancelled_bookings_count": 2
+}
+```
+
 Ошибки:
 
 - `400 invalid_resource_id`: неверный ID
@@ -314,9 +340,30 @@
 
 Мягко деактивирует ресурс (`is_active = false`).
 
+При деактивации автоматически отменяются все будущие активные брони этого ресурса. Бронь, которая уже идет в момент деактивации, остается активной.
+
 Требует авторизацию: `admin`
 
 Успешный ответ: `200 OK`
+
+```json
+{
+  "resource": {
+    "id": 1,
+    "name": "Room A",
+    "type": "meeting_room",
+    "location": "HQ",
+    "capacity": 8,
+    "description": "Main room",
+    "image_urls": [],
+    "equipment": [],
+    "is_active": false,
+    "created_at": "2026-03-01T12:00:00Z",
+    "updated_at": "2026-03-02T09:00:00Z"
+  },
+  "cancelled_bookings_count": 1
+}
+```
 
 Ошибки:
 
@@ -391,6 +438,8 @@
 - `400 invalid_json`: неверный JSON
 - `400 invalid_start_time`: `start_time` не в формате `RFC3339`
 - `400 invalid_end_time`: `end_time` не в формате `RFC3339`
+
+Если ресурс был деактивирован через `PUT /resources/{id}` с `is_active=false` или через `DELETE /resources/{id}`, новые бронирования для него создать нельзя.
 
 ### `GET /bookings/my`
 

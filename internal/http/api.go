@@ -52,7 +52,7 @@ func NewApp() (*App, error) {
 	}
 
 	authService := service.NewAuthService(store, cfg.JWTSecret)
-	resourceService := service.NewResourceService(store, appCache)
+	resourceService := service.NewResourceService(store, store, appCache)
 	bookingService := service.NewBookingService(store, store, appCache)
 
 	if err := authService.SeedAdmin(cfg.DefaultAdmin.FullName, cfg.DefaultAdmin.Email, cfg.DefaultAdmin.Password); err != nil {
@@ -194,6 +194,11 @@ type resourceRequest struct {
 	IsActive    *bool               `json:"is_active,omitempty"`
 }
 
+type resourceDeactivationResponse struct {
+	Resource               domain.Resource `json:"resource"`
+	CancelledBookingsCount int             `json:"cancelled_bookings_count"`
+}
+
 func (a *App) handleResources(w nethttp.ResponseWriter, r *nethttp.Request) {
 	switch r.Method {
 	case nethttp.MethodGet:
@@ -249,21 +254,27 @@ func (a *App) handleResourceByID(w nethttp.ResponseWriter, r *nethttp.Request) {
 			isActive = *req.IsActive
 		}
 
-		resource, err := a.resourceService.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, req.ImageURLs, req.Equipment, isActive)
+		result, err := a.resourceService.Update(id, req.Name, req.Type, req.Location, req.Capacity, req.Description, req.ImageURLs, req.Equipment, isActive)
 		if err != nil {
 			writeError(w, nethttp.StatusBadRequest, "resource_update_failed", err.Error())
 			return
 		}
 
-		writeJSON(w, nethttp.StatusOK, resource)
+		writeJSON(w, nethttp.StatusOK, resourceDeactivationResponse{
+			Resource:               result.Resource,
+			CancelledBookingsCount: result.CancelledBookingsCount,
+		})
 	case nethttp.MethodDelete:
-		resource, err := a.resourceService.Disable(id)
+		result, err := a.resourceService.Disable(id)
 		if err != nil {
 			writeError(w, nethttp.StatusNotFound, "not_found", "resource not found")
 			return
 		}
 
-		writeJSON(w, nethttp.StatusOK, resource)
+		writeJSON(w, nethttp.StatusOK, resourceDeactivationResponse{
+			Resource:               result.Resource,
+			CancelledBookingsCount: result.CancelledBookingsCount,
+		})
 	default:
 		writeError(w, nethttp.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
