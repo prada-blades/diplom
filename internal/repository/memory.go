@@ -327,3 +327,8 @@ func resourceHasEquipment(resource domain.Resource, required []string) bool {
 func overlaps(aStart, aEnd, bStart, bEnd time.Time) bool {
 	return aStart.Before(bEnd) && bStart.Before(aEnd)
 }
+
+func (s *MemoryStore) SaveFCMToken(_ int64, _ string) error        { return nil }
+func (s *MemoryStore) DeleteFCMToken(_ int64, _ string) error      { return nil }
+func (s *MemoryStore) DeleteFCMTokenByToken(_ string) error        { return nil }
+func (s *MemoryStore) GetFCMTokensByUsers(_ []int64) ([]string, error) { return nil, nil }

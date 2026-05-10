@@ -11,8 +11,8 @@ import (
 
 func TestBookingServiceCreateRejectsOverlappingBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Room A", domain.ResourceMeetingRoom, "HQ", 8, "Main room", nil, nil)
 	if err != nil {
@@ -38,8 +38,8 @@ func TestBookingServiceCreateRejectsOverlappingBookings(t *testing.T) {
 
 func TestBookingServiceCreateAllowsAdjacentBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Desk 1", domain.ResourceWorkspace, "HQ", 0, "Window desk", nil, nil)
 	if err != nil {
@@ -63,8 +63,8 @@ func TestBookingServiceCreateAllowsAdjacentBookings(t *testing.T) {
 
 func TestBookingServiceCreateRejectsPastBooking(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Room B", domain.ResourceMeetingRoom, "HQ", 4, "Small room", nil, nil)
 	if err != nil {
@@ -85,8 +85,8 @@ func TestBookingServiceCreateRejectsPastBooking(t *testing.T) {
 
 func TestBookingServiceCancelRespectsOwnership(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Room C", domain.ResourceMeetingRoom, "HQ", 6, "Project room", nil, nil)
 	if err != nil {
@@ -120,8 +120,8 @@ func TestBookingServiceCancelRespectsOwnership(t *testing.T) {
 
 func TestResourceServiceDeactivationCancelsOnlyFutureBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Room D", domain.ResourceMeetingRoom, "HQ", 8, "Main room", nil, nil)
 	if err != nil {
@@ -211,8 +211,8 @@ func TestResourceServiceDeactivationCancelsOnlyFutureBookings(t *testing.T) {
 
 func TestResourceServiceUpdateWithoutDeactivationDoesNotCancelBookings(t *testing.T) {
 	store := repository.NewMemoryStore()
-	resourceService := NewResourceService(store, store, cache.NewNoop())
-	bookingService := NewBookingService(store, store, cache.NewNoop())
+	resourceService := NewResourceService(store, store, cache.NewNoop(), nil)
+	bookingService := NewBookingService(store, store, cache.NewNoop(), nil)
 
 	resource, err := resourceService.Create("Room F", domain.ResourceMeetingRoom, "HQ", 6, "Focus room", nil, nil)
 	if err != nil {

@@ -13,6 +13,10 @@ type UserRepository interface {
 	CreateUser(user domain.User) (domain.User, error)
 	GetUserByEmail(email string) (domain.User, error)
 	GetUserByID(id int64) (domain.User, error)
+	SaveFCMToken(userID int64, token string) error
+	DeleteFCMToken(userID int64, token string) error
+	DeleteFCMTokenByToken(token string) error
+	GetFCMTokensByUsers(userIDs []int64) ([]string, error)
 }
 
 type ResourceRepository interface {

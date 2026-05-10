@@ -779,3 +779,55 @@ func scanBookings(rows *sql.Rows) []domain.Booking {
 func isUniqueViolation(err error) bool {
 	return strings.Contains(err.Error(), "duplicate key value")
 }
+
+func (s *Store) SaveFCMToken(userID int64, token string) error {
+	const query = `
+		INSERT INTO fcm_tokens (user_id, token)
+		VALUES ($1, $2)
+		ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id
+	`
+	_, err := s.db.Exec(query, userID, token)
+	return err
+}
+
+func (s *Store) DeleteFCMToken(userID int64, token string) error {
+	const query = `DELETE FROM fcm_tokens WHERE user_id = $1 AND token = $2`
+	_, err := s.db.Exec(query, userID, token)
+	return err
+}
+
+func (s *Store) DeleteFCMTokenByToken(token string) error {
+	const query = `DELETE FROM fcm_tokens WHERE token = $1`
+	_, err := s.db.Exec(query, token)
+	return err
+}
+
+func (s *Store) GetFCMTokensByUsers(userIDs []int64) ([]string, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(userIDs))
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`SELECT token FROM fcm_tokens WHERE user_id IN (%s)`, strings.Join(placeholders, ","))
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tokens []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, rows.Err()
+}

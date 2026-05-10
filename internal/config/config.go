@@ -6,11 +6,12 @@ import (
 )
 
 type Config struct {
-	Address      string
-	DatabaseURL  string
-	JWTSecret    string
-	Redis        RedisConfig
-	DefaultAdmin DefaultAdmin
+	Address             string
+	DatabaseURL         string
+	JWTSecret           string
+	FirebaseCredentials string
+	Redis               RedisConfig
+	DefaultAdmin        DefaultAdmin
 }
 
 type RedisConfig struct {
@@ -28,9 +29,10 @@ type DefaultAdmin struct {
 
 func Load() Config {
 	return Config{
-		Address:     getenv("APP_ADDRESS", ":8080"),
-		DatabaseURL: getenv("APP_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/diplom?sslmode=disable"),
-		JWTSecret:   getenv("APP_JWT_SECRET", "development-secret"),
+		Address:             getenv("APP_ADDRESS", ":8080"),
+		DatabaseURL:         getenv("APP_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/diplom?sslmode=disable"),
+		JWTSecret:           getenv("APP_JWT_SECRET", "development-secret"),
+		FirebaseCredentials: getenv("APP_FIREBASE_CREDENTIALS", ""),
 		Redis: RedisConfig{
 			Enabled:  getenv("APP_REDIS_ENABLED", "false") == "true",
 			Addr:     getenv("APP_REDIS_ADDR", "localhost:6379"),
