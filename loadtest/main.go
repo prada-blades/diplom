@@ -420,9 +420,65 @@ func newRateLimiter(rps int) *rateLimiter {
 func (rl *rateLimiter) Wait() { <-rl.ticker.C }
 func (rl *rateLimiter) Stop() { rl.ticker.Stop() }
 
+// ── Config file loader ────────────────────────────────────────────────────────
+
+// loadConfigEnv читает config.env из директории, где находится бинарник (или CWD),
+// и выставляет переменные окружения. Флаги командной строки имеют приоритет —
+// вызывается до flag.Parse(), так что os.Setenv заполняет только незаданные значения.
+func loadConfigEnv() {
+	candidates := []string{"config.env", "loadtest/config.env"}
+	var data []byte
+	var chosen string
+	for _, p := range candidates {
+		b, err := os.ReadFile(p)
+		if err == nil {
+			data, chosen = b, p
+			break
+		}
+	}
+	if data == nil {
+		return
+	}
+	fmt.Printf("Конфиг: %s\n", chosen)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		if os.Getenv(k) == "" {
+			os.Setenv(k, v)
+		}
+	}
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 func main() {
+	loadConfigEnv()
+
+	// Подставляем значения из config.env как новые дефолты флагов.
+	// flag.Parse() ниже перезапишет их, только если флаг передан явно в CLI.
+	envFlags := map[string]string{
+		"base":        "BASE_URL",
+		"admin-email": "ADMIN_EMAIL",
+		"admin-pass":  "ADMIN_PASSWORD",
+		"rps":         "RPS",
+		"duration":    "DURATION",
+		"workers":     "WORKERS",
+		"warmup":      "WARMUP",
+		"out":         "OUTPUT_FILE",
+	}
+	for flagName, envKey := range envFlags {
+		if v := os.Getenv(envKey); v != "" {
+			flag.Set(flagName, v)
+		}
+	}
+
 	flag.Parse()
 
 	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
